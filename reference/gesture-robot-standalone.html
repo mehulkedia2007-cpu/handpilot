@@ -1,0 +1,709 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gesture Robot Lab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Layout: a workbench. The 3D robot stage is the main surface.
+   Simulator and gesture guide sit under it; camera, finger channels and the agent log sit in a rail beside it. */
+:root{
+  --bg:#0e1217; --stage:#0c1015; --panel:#151a22; --panel-2:#1b212b; --line:#273140;
+  --fg:#e7ecf3; --muted:#8996a8; --accent:#f2c230; --accent-ink:#1b1500; --robot:#8f7cf6;
+  --good:#4cc38a; --bad:#ef6a6a; --scrim:rgba(12,16,21,.74);
+  --font-display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --font-body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+[hidden]{display:none!important}
+*{box-sizing:border-box}
+html,body{background:var(--bg)}
+body{
+  margin:0;color:var(--fg);font:400 15px/1.5 var(--font-body);
+  padding-block:20px 36px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+}
+.wrap{max-width:1240px;margin:0 auto}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:10px 24px;margin-bottom:16px}
+h1{font:700 32px/1 var(--font-display);letter-spacing:.05em;text-transform:uppercase;margin:0;text-wrap:balance}
+.sub{color:var(--muted);margin:8px 0 0;max-width:62ch}
+.k{font:600 11px/1 var(--font-body);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.chip{font:500 11px/1 var(--font-mono);padding:5px 8px;border:1px solid var(--line);border-radius:3px;color:var(--muted);white-space:nowrap}
+.chip.on{color:var(--good);border-color:var(--good)}
+.chip.err{color:var(--bad);border-color:var(--bad)}
+
+.grid{
+  display:grid;gap:16px;align-items:start;
+  grid-template-columns:minmax(0,1fr) 360px;
+  grid-template-areas:"stage rail" "sim rail" "gest rail";
+}
+@media (max-width:960px){
+  .grid{grid-template-columns:minmax(0,1fr);grid-template-areas:"stage" "sim" "rail" "gest"}
+}
+.stage{grid-area:stage}.sim{grid-area:sim}.rail{grid-area:rail}.gest{grid-area:gest}
+.rail{display:flex;flex-direction:column;gap:16px;min-width:0}
+
+.stage{position:relative;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--stage);aspect-ratio:16/11;min-height:320px;min-width:0}
+.stage canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+.hud{position:absolute;z-index:2;pointer-events:none}
+.hud.tl{top:12px;left:12px;display:flex;flex-direction:column;gap:6px;max-width:70%}
+.hud.tr{top:12px;right:12px;text-align:right}
+.hud.bl{left:12px;bottom:12px;display:flex;gap:10px;align-items:center;background:var(--scrim);border:1px solid var(--line);border-radius:6px;padding:8px 12px 8px 8px}
+.hint{font:400 12px/1.3 var(--font-body);color:var(--muted)}
+.mode{display:inline-flex;align-items:center;gap:8px;align-self:flex-start;background:var(--scrim);border:1px solid var(--mode);color:var(--mode);border-radius:4px;padding:6px 10px;font:700 15px/1 var(--font-display);letter-spacing:.12em}
+.mode .dot{width:8px;height:8px;border-radius:50%;background:var(--mode)}
+.mode-desc{font:400 13px/1.3 var(--font-body);color:var(--fg);background:var(--scrim);padding:4px 8px;border-radius:4px;align-self:flex-start}
+[data-mode]{--mode:var(--good)}
+[data-mode="HOLD"]{--mode:var(--bad)}
+[data-mode="AUTO"]{--mode:var(--robot)}
+[data-mode="IDLE"]{--mode:var(--muted)}
+[data-mode="GREET"]{--mode:var(--accent)}
+.ring{width:44px;height:44px;transform:rotate(-90deg)}
+.ring circle{fill:none;stroke-width:4}
+.ring-bg{stroke:var(--line)}
+.ring-fg{stroke:var(--accent);stroke-dasharray:113.1;stroke-dashoffset:113.1;stroke-linecap:round}
+.gname{font:700 18px/1.1 var(--font-display);letter-spacing:.06em;text-transform:uppercase}
+.stage-msg{position:absolute;inset:0;z-index:3;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;background:var(--stage);color:var(--muted)}
+
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:14px;min-width:0}
+.ph{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.note{color:var(--muted);font-size:13px;line-height:1.45;margin:10px 0 0}
+.row{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.btn{font:600 13px/1 var(--font-body);letter-spacing:.02em;min-height:36px;padding:0 14px;border-radius:4px;border:1px solid var(--line);background:var(--panel-2);color:var(--fg);cursor:pointer}
+.btn:hover{border-color:var(--muted)}
+.btn:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+input[type=range]{width:100%;accent-color:var(--accent);margin:0}
+
+.preview{position:relative;aspect-ratio:4/3;border-radius:4px;overflow:hidden;background:var(--stage);border:1px solid var(--line)}
+.mirror{position:absolute;inset:0;transform:scaleX(-1)}
+.mirror video,.mirror canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.preview-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px}
+
+.ch{display:grid;grid-template-columns:56px minmax(0,1fr) 36px;align-items:center;gap:4px 10px;margin-bottom:10px}
+.ch .n{font:600 13px/1 var(--font-body)}
+.ch .bar{height:8px;background:var(--panel-2);border-radius:2px;overflow:hidden}
+.ch .bar i{display:block;height:100%;width:0;background:var(--accent)}
+.ch .val{font:500 12px/1 var(--font-mono);text-align:right;font-variant-numeric:tabular-nums}
+.ch .to{grid-column:2 / 4;font-size:12px;color:var(--muted);margin-top:-2px}
+
+.pipe{display:grid;gap:6px;margin-bottom:12px}
+.pipe div{display:grid;grid-template-columns:56px minmax(0,1fr);gap:8px;font-size:13px;align-items:baseline}
+.tag{font:600 10px/1 var(--font-mono);letter-spacing:.08em;padding:3px 5px;border-radius:2px;text-align:center;border:1px solid var(--line);color:var(--muted)}
+.tag.SEE{color:#6fb7ff;border-color:#2b4a6b}
+.tag.DECIDE{color:var(--accent);border-color:#6b5a1c}
+.tag.ACT{color:var(--good);border-color:#255a43}
+.log{list-style:none;margin:0;padding:0;height:176px;overflow-y:auto;border-top:1px solid var(--line)}
+.log li{display:grid;grid-template-columns:38px 54px minmax(0,1fr);gap:8px;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--line);font-size:12.5px}
+.log time{font:400 11px/1 var(--font-mono);color:var(--muted)}
+
+.presets{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.sliders{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 24px}
+@media (max-width:640px){.sliders{grid-template-columns:minmax(0,1fr)}}
+.srow{display:grid;grid-template-columns:70px minmax(0,1fr) 32px;align-items:center;gap:10px;font-size:13px}
+.srow output{font:500 12px/1 var(--font-mono);text-align:right;font-variant-numeric:tabular-nums}
+.tune{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+
+.glist{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 24px;margin:0;padding:0;list-style:none}
+@media (max-width:640px){.glist{grid-template-columns:minmax(0,1fr)}}
+.glist li{display:grid;grid-template-columns:44px minmax(0,1fr);gap:12px;align-items:center}
+.glyph{display:flex;align-items:flex-end;gap:3px;height:26px}
+.glyph span{display:block;width:6px;background:var(--accent);border-radius:1px}
+.gt{font:700 15px/1.1 var(--font-display);letter-spacing:.06em;text-transform:uppercase}
+.gd{font-size:13px;color:var(--muted);line-height:1.4}
+
+.pipeline{margin-top:24px;display:flex;flex-wrap:wrap;align-items:stretch;gap:8px}
+.step{flex:1 1 150px;min-width:0;border:1px solid var(--line);border-radius:6px;padding:10px 12px;background:var(--panel)}
+.step b{display:block;font:700 14px/1.2 var(--font-display);letter-spacing:.08em;text-transform:uppercase;margin-bottom:2px}
+.step span{font-size:12.5px;color:var(--muted);line-height:1.4}
+
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Gesture Robot Lab</h1>
+      <p class="sub">Your fingers drive a robot. A small agent watches, decides and acts, and takes over when you stop.</p>
+    </div>
+    <span class="chip" id="srcChip">Source: simulator</span>
+  </header>
+
+  <div class="grid">
+    <section class="stage" id="stage" aria-label="3D robot">
+      <div class="hud tl">
+        <div class="mode" id="modeBadge" data-mode="MANUAL"><span class="dot"></span><span id="modeName">MANUAL</span></div>
+        <div class="mode-desc" id="modeDesc">Robot mirrors your fingers</div>
+      </div>
+      <div class="hud tr hint">Drag to orbit. Scroll to zoom.</div>
+      <div class="hud bl" id="gestureBox" data-mode="MANUAL">
+        <svg class="ring" viewBox="0 0 44 44" aria-hidden="true"><circle class="ring-bg" cx="22" cy="22" r="18"/><circle class="ring-fg" id="ringFg" cx="22" cy="22" r="18"/></svg>
+        <div>
+          <div class="k">Gesture</div>
+          <div class="gname" id="gestureName">none</div>
+          <div class="hint" id="holdHint">&nbsp;</div>
+        </div>
+      </div>
+      <div class="stage-msg" id="stageMsg" hidden></div>
+    </section>
+
+    <section class="panel sim" id="simPanel" aria-label="Simulator">
+      <div class="ph"><span class="k">Simulator</span><span class="chip">0 = straight, 100 = curled</span></div>
+      <div class="presets" id="presets"></div>
+      <div class="sliders" id="sliders"></div>
+      <div class="tune">
+        <div class="srow"><label for="smooth">Smoothing</label><input id="smooth" type="range" min="0" max="90" value="45"><output id="smoothOut">45</output></div>
+        <p class="note">Hold a preset for about a second and the agent treats it as a command. Higher smoothing makes the robot move more slowly and steadily.</p>
+      </div>
+    </section>
+
+    <div class="rail">
+      <section class="panel" aria-label="Camera">
+        <div class="ph"><span class="k">Camera</span><span class="chip" id="camState">Off</span></div>
+        <div class="preview">
+          <div class="mirror"><video id="video" playsinline muted></video><canvas id="ovl"></canvas></div>
+          <div class="preview-empty" id="previewEmpty">Camera is off</div>
+        </div>
+        <div class="row">
+          <button class="btn primary" id="btnCam" type="button">Start camera</button>
+          <button class="btn" id="btnStop" type="button" hidden>Stop camera</button>
+        </div>
+        <div class="row" id="calRow" hidden>
+          <button class="btn" id="btnOpen" type="button">Set open hand</button>
+          <button class="btn" id="btnFist" type="button">Set fist</button>
+          <button class="btn" id="btnResetCal" type="button">Reset</button>
+        </div>
+        <p class="note" id="camNote">Video is processed inside this browser tab and is never uploaded. Use a well lit room and keep your hand in view.</p>
+      </section>
+
+      <section class="panel" aria-label="Finger channels">
+        <div class="ph"><span class="k">Finger channels</span><span class="chip">bend %</span></div>
+        <div id="channels"></div>
+        <p class="note">Right and left are as you see them on screen. Hand position turns the robot.</p>
+      </section>
+
+      <section class="panel" aria-label="Agent">
+        <div class="ph"><span class="k">Agent</span><span class="chip" id="agentMode">MANUAL</span></div>
+        <div class="pipe">
+          <div><span class="tag SEE">SEE</span><span id="pSee">simulator input</span></div>
+          <div><span class="tag DECIDE">DECIDE</span><span id="pDecide">mode MANUAL</span></div>
+          <div><span class="tag ACT">ACT</span><span id="pAct">copy finger bends to joints</span></div>
+        </div>
+        <ol class="log" id="log" aria-label="Agent decisions"></ol>
+      </section>
+    </div>
+
+    <section class="panel gest" aria-label="Gesture commands">
+      <div class="ph"><span class="k">Gesture commands</span><span class="chip">hold about 1 s</span></div>
+      <ul class="glist" id="glist"></ul>
+      <p class="note">Commands only fire when a gesture is held, so normal finger movement never triggers one. With no hand in view for 3 seconds the agent switches to IDLE and resumes when your hand returns.</p>
+    </section>
+  </div>
+
+  <section class="pipeline" aria-label="How it works">
+    <div class="step"><b>Webcam</b><span>Video frames from your camera.</span></div>
+    <div class="step"><b>Hand landmarks</b><span>MediaPipe finds 21 points on your hand.</span></div>
+    <div class="step"><b>Finger bend</b><span>Distances between points become five numbers, 0 to 100%.</span></div>
+    <div class="step"><b>Agent</b><span>Sees the hand, decides a mode, acts on the robot.</span></div>
+    <div class="step"><b>Robot joints</b><span>Three.js rotates shoulders, elbows, head and body.</span></div>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+'use strict';
+
+/* ================= LOGIC START (pure functions, no page access) ================= */
+var FINGERS=['thumb','index','middle','ring','pinky'];
+function clamp(v,a,b){return Math.min(b,Math.max(a,v));}
+function lerp(a,b,t){return a+(b-a)*t;}
+function dist(a,b){return Math.hypot(a.x-b.x,a.y-b.y,(a.z||0)-(b.z||0));}
+
+// "open" and "closed" are the raw ratios for a straight and a fully curled finger.
+// They are estimates; the Set open hand / Set fist buttons replace them with your own hand.
+var DEFAULT_CAL={
+  open:  {thumb:1.9,index:1.75,middle:1.75,ring:1.75,pinky:1.7},
+  closed:{thumb:0.7,index:0.9, middle:0.9, ring:0.9, pinky:0.85}
+};
+
+// Ratios do not depend on hand size or distance from the camera.
+// Fingers: fingertip-to-wrist distance divided by knuckle-to-wrist distance.
+// Thumb: thumb tip to pinky knuckle, divided by palm width.
+function fingerRatios(lm){
+  var wrist=lm[0], palm=dist(lm[5],lm[17]), r={};
+  r.thumb=dist(lm[4],lm[17])/palm;
+  [['index',8,5],['middle',12,9],['ring',16,13],['pinky',20,17]].forEach(function(f){
+    r[f[0]]=dist(lm[f[1]],wrist)/dist(lm[f[2]],wrist);
+  });
+  return r;
+}
+function bendFromRatio(name,ratio,cal){
+  var o=cal.open[name], c=cal.closed[name];
+  return clamp((o-ratio)/(o-c),0,1);
+}
+function bendsFromRatios(r,cal){
+  var b={}; FINGERS.forEach(function(n){b[n]=bendFromRatio(n,r[n],cal);}); return b;
+}
+
+// Turn five bend numbers (0 straight .. 1 curled) into a named gesture.
+function classify(b){
+  var up=function(k){return b[k]<0.3;}, down=function(k){return b[k]>0.65;};
+  var four=['index','middle','ring','pinky'];
+  if(FINGERS.every(down)) return 'FIST';
+  if(FINGERS.every(up)) return 'OPEN';
+  if(up('index')&&up('middle')&&down('ring')&&down('pinky')) return 'PEACE';
+  if(up('index')&&down('middle')&&down('ring')&&down('pinky')) return 'POINT';
+  if(up('thumb')&&four.every(down)) return 'THUMBS_UP';
+  return 'NONE';
+}
+
+var COMMANDS={FIST:'HOLD',OPEN:'MANUAL',PEACE:'AUTO',THUMBS_UP:'GREET'};
+var SAYS={FIST:'fist',OPEN:'open palm',PEACE:'peace sign',THUMBS_UP:'thumbs up'};
+
+// The agent: every frame it SEES (hand? which gesture?), DECIDES (mode) and the page ACTS (moves the robot).
+function Agent(onLog,now0){
+  this.onLog=onLog||function(){};
+  this.mode='MANUAL'; this.modeSince=now0||0;
+  this.handSeen=false; this.lastSeen=now0||0;
+  this.cand='NONE'; this.candStart=now0||0; this.lastMatch=now0||0; this.fired=false;
+  this.pend=null; this.pendSince=0;
+  this.holdMs=900; this.idleMs=3000; this.graceMs=250; this.greetMs=3000;
+  this.progress=0;
+}
+Agent.prototype.setMode=function(now,mode,why,act){
+  if(mode===this.mode) return;
+  this.mode=mode; this.modeSince=now;
+  this.onLog('DECIDE',why); this.onLog('ACT',act);
+};
+Agent.prototype.wouldChange=function(g){
+  if(g==='FIST') return this.mode!=='HOLD';
+  if(g==='OPEN') return this.mode!=='MANUAL';
+  if(g==='PEACE') return true;
+  if(g==='THUMBS_UP') return this.mode!=='GREET';
+  return false;
+};
+Agent.prototype.runCommand=function(now,g){
+  var s=SAYS[g];
+  if(g==='FIST') this.setMode(now,'HOLD',s+' held, latch HOLD','freeze every joint at its current angle');
+  else if(g==='OPEN') this.setMode(now,'MANUAL',s+' held, control returns to you','copy finger bends to joints');
+  else if(g==='PEACE'){
+    if(this.mode==='AUTO') this.setMode(now,'MANUAL',s+' held again, release AUTO','copy finger bends to joints');
+    else this.setMode(now,'AUTO',s+' held, take over','run the dance routine');
+  }
+  else if(g==='THUMBS_UP') this.setMode(now,'GREET',s+' held, say hello','wave the right arm for 3 s');
+};
+Agent.prototype.step=function(now,obs){
+  // SEE: is a hand there?
+  if(obs.hand){
+    this.lastSeen=now;
+    if(!this.handSeen){this.handSeen=true; this.onLog('SEE','hand detected');}
+    if(this.mode==='IDLE') this.setMode(now,'MANUAL','hand is back, resume following','copy finger bends to joints');
+  } else if(this.handSeen){
+    this.handSeen=false; this.onLog('SEE','hand lost');
+  }
+  // DECIDE: nothing to follow for a while -> go idle on my own.
+  if(!obs.hand && this.mode==='MANUAL' && now-this.lastSeen>this.idleMs)
+    this.setMode(now,'IDLE','no hand for 3 s, nothing to follow','ease the robot back to its neutral pose');
+  // DECIDE: a one-shot greeting ends by itself.
+  if(this.mode==='GREET' && now-this.modeSince>this.greetMs)
+    this.setMode(now,'MANUAL','greeting finished','copy finger bends to joints');
+  // Gesture must be held. A short flicker (graceMs) does not reset the timer,
+  // and the hold is timed from the first moment the new gesture was seen.
+  var g=obs.hand?obs.gesture:'NONE';
+  if(g===this.cand){this.lastMatch=now; this.pend=null;}
+  else{
+    if(this.pend!==g){this.pend=g; this.pendSince=now;}
+    if(now-this.lastMatch>this.graceMs){
+      this.cand=g; this.candStart=this.pendSince; this.lastMatch=now; this.fired=false; this.pend=null;
+    }
+  }
+  this.progress=0;
+  if(COMMANDS[this.cand] && !this.fired && this.wouldChange(this.cand)){
+    this.progress=clamp((now-this.candStart)/this.holdMs,0,1);
+    if(this.progress>=1){this.fired=true;this.progress=0;this.runCommand(now,this.cand);}
+  }
+  return {mode:this.mode,progress:this.progress,candidate:this.cand};
+};
+
+// Target joint angles in radians for each mode. HOLD returns null so the robot keeps its current pose.
+function poseFor(mode,t,b,yaw){
+  if(mode==='HOLD') return null;
+  if(mode==='AUTO'){
+    return {rS:1.5+Math.sin(t*2.2)*0.9, rE:0.6+0.5*Math.sin(t*4.4+1),
+            lS:1.5+Math.sin(t*2.2+Math.PI)*0.9, lE:0.6+0.5*Math.sin(t*4.4+2.5),
+            head:Math.sin(t*2.2)*0.25, yaw:Math.sin(t*0.8)*0.6, bob:Math.abs(Math.sin(t*2.2))*0.08};
+  }
+  if(mode==='IDLE'){
+    return {rS:0.12+0.03*Math.sin(t*1.4), rE:0.1, lS:0.12+0.03*Math.sin(t*1.4), lE:0.1,
+            head:0.05*Math.sin(t*0.9), yaw:0, bob:0.015*Math.sin(t*1.4)};
+  }
+  if(mode==='GREET'){
+    return {rS:2.55, rE:0.7+0.55*Math.sin(t*9), lS:0.12, lE:0.1, head:0.15, yaw:0, bob:0};
+  }
+  // MANUAL: each finger drives one joint.
+  return {rS:(1-b.index)*2.7, rE:b.middle*2.0, lS:(1-b.ring)*2.7, lE:b.pinky*2.0,
+          head:(b.thumb-0.5)*0.8, yaw:yaw, bob:0};
+}
+/* ================= LOGIC END ================= */
+
+var $=function(id){return document.getElementById(id);};
+var t0=performance.now();
+var NAMES={thumb:'Thumb',index:'Index',middle:'Middle',ring:'Ring',pinky:'Pinky'};
+var DRIVES={thumb:'drives head nod',index:'drives right shoulder',middle:'drives right elbow',ring:'drives left shoulder',pinky:'drives left elbow'};
+var LABEL={NONE:'none',FIST:'fist',OPEN:'open palm',PEACE:'peace sign',THUMBS_UP:'thumbs up',POINT:'point'};
+var MODE_DESC={MANUAL:'Robot mirrors your fingers',HOLD:'Joints frozen. Show an open palm to resume',AUTO:'Agent is driving. Show a peace sign to hand back',IDLE:'Waiting for a hand. Robot at neutral pose',GREET:'Waving hello'};
+var ACT_TEXT={MANUAL:'copy finger bends to joints',HOLD:'hold every joint still',AUTO:'run the dance routine',IDLE:'ease to neutral pose',GREET:'wave the right arm'};
+var PRESETS=[
+  ['Open palm',[0,0,0,0,0]],['Fist',[1,1,1,1,1]],['Point',[1,0,1,1,1]],
+  ['Peace sign',[1,0,0,1,1]],['Thumbs up',[0,1,1,1,1]],['Relax',[0.5,0.8,0.8,0.8,0.8]]
+];
+var GUIDE=[
+  ['Open palm',[0,0,0,0,0],'MANUAL. The robot mirrors your fingers.'],
+  ['Fist',[1,1,1,1,1],'HOLD. Freezes the robot where it is.'],
+  ['Peace sign',[1,0,0,1,1],'AUTO. The agent runs a dance. Show it again to take control back.'],
+  ['Thumbs up',[0,1,1,1,1],'GREET. The robot waves for 3 seconds.']
+];
+
+/* ---------- agent + log ---------- */
+var logItems=[], logDirty=true;
+function addLog(tag,text){
+  logItems.unshift({t:performance.now()-t0,tag:tag,text:text});
+  if(logItems.length>40) logItems.pop();
+  logDirty=true;
+}
+var agent=new Agent(addLog,performance.now());
+addLog('SEE','simulator input active');
+addLog('DECIDE','mode MANUAL, nothing to override');
+addLog('ACT','copy finger bends to joints');
+
+/* ---------- inputs ---------- */
+var source='sim';
+var simBends={thumb:0.5,index:0.8,middle:0.8,ring:0.8,pinky:0.8}, simYaw=0;
+var camBends={thumb:0.5,index:0.8,middle:0.8,ring:0.8,pinky:0.8}, camHand=false, camYaw=0, camX=0.5;
+var cal=JSON.parse(JSON.stringify(DEFAULT_CAL)), lastRatios=null;
+try{var saved=localStorage.getItem('gesture-robot-cal'); if(saved){var p=JSON.parse(saved); if(p&&p.open&&p.closed) cal=p;}}catch(e){}
+function saveCal(){try{localStorage.setItem('gesture-robot-cal',JSON.stringify(cal));}catch(e){}}
+
+/* ---------- build the controls ---------- */
+var sliders={}, outs={}, barEls={}, valEls={};
+(function buildUi(){
+  var sl=$('sliders');
+  FINGERS.forEach(function(n){
+    var row=document.createElement('div'); row.className='srow';
+    row.innerHTML='<label for="s_'+n+'">'+NAMES[n]+'</label><input id="s_'+n+'" type="range" min="0" max="100" value="'+Math.round(simBends[n]*100)+'"><output id="o_'+n+'">'+Math.round(simBends[n]*100)+'</output>';
+    sl.appendChild(row);
+    sliders[n]=row.querySelector('input'); outs[n]=row.querySelector('output');
+    sliders[n].addEventListener('input',function(){simBends[n]=sliders[n].value/100; outs[n].textContent=sliders[n].value;});
+  });
+  var hr=document.createElement('div'); hr.className='srow';
+  hr.innerHTML='<label for="s_yaw">Turn</label><input id="s_yaw" type="range" min="-100" max="100" value="0"><output id="o_yaw">0</output>';
+  sl.appendChild(hr);
+  var yawIn=hr.querySelector('input'), yawOut=hr.querySelector('output');
+  yawIn.addEventListener('input',function(){simYaw=yawIn.value/100*0.8; yawOut.textContent=yawIn.value;});
+
+  var pr=$('presets');
+  PRESETS.forEach(function(p){
+    var b=document.createElement('button'); b.type='button'; b.className='btn'; b.textContent=p[0];
+    b.addEventListener('click',function(){
+      if(source==='cam') return;
+      FINGERS.forEach(function(n,i){simBends[n]=p[1][i]; sliders[n].value=Math.round(p[1][i]*100); outs[n].textContent=sliders[n].value;});
+    });
+    pr.appendChild(b);
+  });
+
+  var ch=$('channels');
+  FINGERS.forEach(function(n){
+    var row=document.createElement('div'); row.className='ch';
+    row.innerHTML='<span class="n">'+NAMES[n]+'</span><span class="bar"><i></i></span><span class="val">0</span><span class="to">'+DRIVES[n]+'</span>';
+    ch.appendChild(row); barEls[n]=row.querySelector('i'); valEls[n]=row.querySelector('.val');
+  });
+
+  var gl=$('glist');
+  GUIDE.forEach(function(g){
+    var li=document.createElement('li'), glyph=document.createElement('div'); glyph.className='glyph';
+    g[1].forEach(function(bend){var s=document.createElement('span'); s.style.height=(5+(1-bend)*21)+'px'; glyph.appendChild(s);});
+    li.appendChild(glyph);
+    var d=document.createElement('div'); d.innerHTML='<div class="gt"></div><div class="gd"></div>';
+    d.querySelector('.gt').textContent=g[0]; d.querySelector('.gd').textContent=g[2];
+    li.appendChild(d); gl.appendChild(li);
+  });
+
+  var sm=$('smooth'); sm.addEventListener('input',function(){$('smoothOut').textContent=sm.value;});
+})();
+function smoothAmount(){return $('smooth').value/100;}
+
+/* ---------- 3D scene (Three.js) ---------- */
+var stageEl=$('stage'), renderer=null, scene=null, camera=null, rig=null;
+var TARGET=null, theta=0.45, phi=1.28, radius=9;
+var cur={rS:0.5,rE:0.2,lS:0.5,lE:0.2,head:0,yaw:0,bob:0};
+
+function buildRobot(){
+  var mBody=new THREE.MeshStandardMaterial({color:0x8f7cf6,metalness:0.3,roughness:0.5});
+  var mDark=new THREE.MeshStandardMaterial({color:0x2a3040,metalness:0.5,roughness:0.5});
+  var mGlow=new THREE.MeshStandardMaterial({color:0xf2c230,emissive:0xf2c230,emissiveIntensity:0.9});
+  var box=function(w,h,d,m){return new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);};
+  var cyl=function(r1,r2,h,m){return new THREE.Mesh(new THREE.CylinderGeometry(r1,r2,h,20),m);};
+  var sph=function(r,m){return new THREE.Mesh(new THREE.SphereGeometry(r,20,16),m);};
+  var root=new THREE.Group(), body=new THREE.Group(); root.add(body);
+
+  [-0.32,0.32].forEach(function(x){
+    var leg=cyl(0.16,0.13,0.95,mDark); leg.position.set(x,0.62,0); root.add(leg);
+    var foot=box(0.42,0.16,0.65,mBody); foot.position.set(x,0.08,0.1); root.add(foot);
+  });
+  var pelvis=box(1.0,0.32,0.55,mDark); pelvis.position.set(0,1.2,0); root.add(pelvis);
+
+  var torso=box(1.3,1.25,0.7,mBody); torso.position.set(0,1.95,0); body.add(torso);
+  var core=box(0.5,0.34,0.05,mGlow); core.position.set(0,1.95,0.37); body.add(core);
+  var neck=cyl(0.12,0.12,0.2,mDark); neck.position.set(0,2.68,0); body.add(neck);
+
+  var head=new THREE.Group(); head.position.set(0,2.8,0); body.add(head);
+  var skull=box(0.85,0.62,0.7,mBody); skull.position.y=0.31; head.add(skull);
+  var visor=box(0.7,0.26,0.08,mDark); visor.position.set(0,0.33,0.36); head.add(visor);
+  [-0.17,0.17].forEach(function(x){var e=box(0.14,0.1,0.04,mGlow); e.position.set(x,0.33,0.41); head.add(e);});
+  var ant=cyl(0.02,0.02,0.3,mDark); ant.position.set(0.25,0.77,0); head.add(ant);
+  var tip=sph(0.06,mGlow); tip.position.set(0.25,0.95,0); head.add(tip);
+
+  function arm(x){
+    var sh=new THREE.Group(); sh.position.set(x,2.45,0); body.add(sh);
+    sh.add(sph(0.22,mDark));
+    var up=cyl(0.13,0.12,0.8,mBody); up.position.y=-0.4; sh.add(up);
+    var el=new THREE.Group(); el.position.y=-0.8; sh.add(el);
+    el.add(sph(0.15,mDark));
+    var fo=cyl(0.12,0.1,0.7,mBody); fo.position.y=-0.35; el.add(fo);
+    var hand=box(0.26,0.3,0.2,mDark); hand.position.y=-0.82; el.add(hand);
+    return {sh:sh,el:el};
+  }
+  var R=arm(0.92), L=arm(-0.92);   // R is the arm on the right side of the screen
+  scene.add(root);
+  return {root:root,head:head,rS:R.sh,rE:R.el,lS:L.sh,lE:L.el};
+}
+
+function initScene(){
+  if(typeof THREE==='undefined') throw new Error('The 3D library did not load. Check your connection and reload.');
+  renderer=new THREE.WebGLRenderer({antialias:true});
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+  renderer.setClearColor(0x0c1015,1);
+  stageEl.insertBefore(renderer.domElement,stageEl.firstChild);
+  scene=new THREE.Scene();
+  scene.fog=new THREE.Fog(0x0c1015,14,26);
+  camera=new THREE.PerspectiveCamera(40,16/11,0.1,100);
+  TARGET=new THREE.Vector3(0,1.9,0);
+
+  scene.add(new THREE.AmbientLight(0x8a93aa,0.75));
+  var key=new THREE.DirectionalLight(0xffffff,0.95); key.position.set(3,6,5); scene.add(key);
+  var rim=new THREE.PointLight(0x8f7cf6,1.1,20); rim.position.set(-4,4,-4); scene.add(rim);
+
+  var grid=new THREE.GridHelper(16,32,0x2a3340,0x1b222c); scene.add(grid);
+  var ring=new THREE.Mesh(new THREE.RingGeometry(1.45,1.52,64),new THREE.MeshBasicMaterial({color:0xf2c230,side:THREE.DoubleSide,transparent:true,opacity:0.8}));
+  ring.rotation.x=-Math.PI/2; ring.position.y=0.01; scene.add(ring);
+  var blob=new THREE.Mesh(new THREE.CircleGeometry(1.2,40),new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:0.35}));
+  blob.rotation.x=-Math.PI/2; blob.position.y=0.005; scene.add(blob);
+
+  rig=buildRobot();
+
+  var dom=renderer.domElement, drag=null;
+  dom.addEventListener('pointerdown',function(e){drag={x:e.clientX,y:e.clientY}; try{dom.setPointerCapture(e.pointerId);}catch(_){} dom.style.cursor='grabbing';});
+  dom.addEventListener('pointermove',function(e){
+    if(!drag) return;
+    theta-=(e.clientX-drag.x)*0.008; phi=clamp(phi-(e.clientY-drag.y)*0.006,0.6,1.7);
+    drag={x:e.clientX,y:e.clientY};
+  });
+  var end=function(){drag=null; dom.style.cursor='grab';};
+  dom.addEventListener('pointerup',end); dom.addEventListener('pointercancel',end);
+  dom.addEventListener('wheel',function(e){e.preventDefault(); radius=clamp(radius+e.deltaY*0.01,5,14);},{passive:false});
+
+  var resize=function(){
+    var w=stageEl.clientWidth,h=stageEl.clientHeight; if(!w||!h) return;
+    renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix();
+  };
+  if(window.ResizeObserver) new ResizeObserver(resize).observe(stageEl); else window.addEventListener('resize',resize);
+  resize();
+}
+function updateCamera(){
+  camera.position.set(TARGET.x+radius*Math.sin(phi)*Math.sin(theta),TARGET.y+radius*Math.cos(phi),TARGET.z+radius*Math.sin(phi)*Math.cos(theta));
+  camera.lookAt(TARGET);
+}
+function applyPose(target,alpha){
+  for(var k in cur){cur[k]=lerp(cur[k],target[k],alpha);}
+  if(!rig) return;
+  rig.rS.rotation.z=cur.rS;        // right arm is at +x: positive swings it outward and up
+  rig.lS.rotation.z=-cur.lS;       // left arm is at -x: mirrored sign
+  rig.rE.rotation.x=-cur.rE;       // negative folds the forearm toward the viewer
+  rig.lE.rotation.x=-cur.lE;
+  rig.head.rotation.x=cur.head;
+  rig.root.rotation.y=cur.yaw;
+  rig.root.position.y=cur.bob;
+}
+try{ initScene(); }
+catch(err){ var m=$('stageMsg'); m.hidden=false; m.textContent=(err&&err.message)||'3D view is not available here.'; renderer=null; }
+
+/* ---------- camera + MediaPipe hands ---------- */
+var HANDS_BASE='https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/';
+var LINKS=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+var TIPS=[4,8,12,16,20];
+var video=$('video'), ovl=$('ovl'), octx=ovl.getContext('2d');
+var stream=null, hands=null, camRunning=false, busy=false;
+
+function loadScript(src){
+  return new Promise(function(res,rej){
+    var s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=function(){rej(new Error('load failed'));};
+    document.head.appendChild(s);
+  });
+}
+function setCam(state,note,cls){
+  var c=$('camState'); c.textContent=state; c.className='chip'+(cls?' '+cls:'');
+  if(note) $('camNote').textContent=note;
+}
+function camFail(note){ setCam('Unavailable',note,'err'); $('btnCam').hidden=false; $('btnStop').hidden=true; }
+function describeCamError(e){
+  var n=e&&e.name;
+  if(n==='NotAllowedError'||n==='SecurityError') return 'The camera is blocked in this view. Use the simulator, or save this page as an HTML file and open it on your computer in Chrome or Edge to use your webcam.';
+  if(n==='NotFoundError'||n==='OverconstrainedError') return 'No camera was found on this device.';
+  if(n==='NotReadableError') return 'The camera is in use by another app. Close it and try again.';
+  return 'The camera could not start. Use the simulator instead.';
+}
+function stopStream(){
+  if(stream){stream.getTracks().forEach(function(t){t.stop();}); stream=null;}
+  video.srcObject=null;
+}
+async function startCamera(){
+  if(camRunning) return;
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){camFail('This browser view cannot reach a camera. Use the simulator.'); return;}
+  setCam('Starting','Asking the browser for your camera.');
+  try{ stream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:640},height:{ideal:480},facingMode:'user'},audio:false}); }
+  catch(e){ camFail(describeCamError(e)); return; }
+  video.srcObject=stream;
+  try{ await video.play(); }catch(e){}
+  setCam('Loading','Loading the hand model. The first time takes a few seconds.');
+  try{
+    if(!window.Hands) await loadScript(HANDS_BASE+'hands.js');
+    hands=new window.Hands({locateFile:function(f){return HANDS_BASE+f;}});
+    hands.setOptions({maxNumHands:1,modelComplexity:1,minDetectionConfidence:0.6,minTrackingConfidence:0.5});
+    hands.onResults(onResults);
+    await hands.initialize();
+  }catch(e){ stopStream(); camFail('The hand model could not load. Check your connection and try again.'); return; }
+  camRunning=true; source='cam'; camHand=false; agent.lastSeen=performance.now();
+  setCam('Live','Show your hand to the camera. Straight fingers are 0%, curled fingers are 100%. Use the buttons below to calibrate to your hand.','on');
+  $('btnCam').hidden=true; $('btnStop').hidden=false; $('calRow').hidden=false; $('previewEmpty').hidden=true;
+  $('srcChip').textContent='Source: camera';
+  FINGERS.forEach(function(n){sliders[n].disabled=true;});
+  addLog('SEE','camera on, looking for a hand');
+  camLoop();
+}
+function stopCamera(){
+  camRunning=false; stopStream();
+  try{ if(hands&&hands.close) hands.close(); }catch(e){}
+  hands=null; source='sim'; camHand=false;
+  octx.clearRect(0,0,ovl.width,ovl.height);
+  setCam('Off','Camera stopped. The simulator is back in control.');
+  $('btnCam').hidden=false; $('btnStop').hidden=true; $('calRow').hidden=true; $('previewEmpty').hidden=false;
+  $('srcChip').textContent='Source: simulator';
+  FINGERS.forEach(function(n){sliders[n].disabled=false; sliders[n].value=Math.round(simBends[n]*100); outs[n].textContent=sliders[n].value;});
+  addLog('SEE','camera off, simulator input active');
+}
+async function camLoop(){
+  if(!camRunning) return;
+  if(video.readyState>=2&&!busy&&hands){
+    busy=true;
+    try{ await hands.send({image:video}); }catch(e){}
+    busy=false;
+  }
+  if(camRunning) requestAnimationFrame(camLoop);
+}
+function onResults(res){
+  if(ovl.width!==video.videoWidth&&video.videoWidth){ovl.width=video.videoWidth; ovl.height=video.videoHeight;}
+  octx.clearRect(0,0,ovl.width,ovl.height);
+  var lm=res.multiHandLandmarks&&res.multiHandLandmarks[0];
+  camHand=!!lm;
+  if(!lm) return;
+  var W=ovl.width,H=ovl.height;
+  octx.lineWidth=3; octx.strokeStyle='#f2c230'; octx.beginPath();
+  LINKS.forEach(function(l){octx.moveTo(lm[l[0]].x*W,lm[l[0]].y*H); octx.lineTo(lm[l[1]].x*W,lm[l[1]].y*H);});
+  octx.stroke();
+  lm.forEach(function(p,i){
+    octx.beginPath(); octx.arc(p.x*W,p.y*H,TIPS.indexOf(i)>=0?6:3.5,0,Math.PI*2);
+    octx.fillStyle=TIPS.indexOf(i)>=0?'#f2c230':'#e7ecf3'; octx.fill();
+  });
+  var raw=fingerRatios(lm);
+  lastRatios=lastRatios||raw;
+  FINGERS.forEach(function(n){lastRatios[n]=lerp(lastRatios[n],raw[n],0.5);});
+  var b=bendsFromRatios(lastRatios,cal);
+  FINGERS.forEach(function(n){camBends[n]=b[n];});
+  camX=lerp(camX,lm[9].x,0.4);
+  camYaw=(0.5-camX)*1.6;
+}
+function capture(which){
+  if(!lastRatios||!camHand){ $('camNote').textContent='Show your hand to the camera first, then press the button.'; return; }
+  var next=JSON.parse(JSON.stringify(cal));
+  FINGERS.forEach(function(n){next[which][n]=lastRatios[n];});
+  var ok=FINGERS.every(function(n){return next.open[n]-next.closed[n]>0.25;});
+  if(!ok){ $('camNote').textContent='That reading is too close to the other pose. Open your hand fully or make a tight fist, then try again.'; return; }
+  cal=next; saveCal();
+  $('camNote').textContent=(which==='open'?'Open hand':'Fist')+' saved. Straight fingers now read 0%, curled fingers 100%.';
+}
+$('btnCam').addEventListener('click',startCamera);
+$('btnStop').addEventListener('click',stopCamera);
+$('btnOpen').addEventListener('click',function(){capture('open');});
+$('btnFist').addEventListener('click',function(){capture('closed');});
+$('btnResetCal').addEventListener('click',function(){cal=JSON.parse(JSON.stringify(DEFAULT_CAL)); saveCal(); $('camNote').textContent='Calibration reset to defaults.';});
+try{
+  var pp=document.permissionsPolicy||document.featurePolicy;
+  if(pp&&pp.allowsFeature&&!pp.allowsFeature('camera')) setCam('Blocked','The camera is blocked in this view. Use the simulator, or save this page as an HTML file and open it on your computer in Chrome or Edge to use your webcam.','err');
+}catch(e){}
+
+/* ---------- HUD ---------- */
+var lastHud=0;
+function fmt(ms){var s=Math.floor(ms/1000); return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');}
+function updateHud(st,b,g,hand){
+  var mode=st.mode;
+  $('modeBadge').dataset.mode=mode; $('gestureBox').dataset.mode=mode;
+  $('modeName').textContent=mode; $('modeDesc').textContent=MODE_DESC[mode]; $('agentMode').textContent=mode;
+  $('gestureName').textContent=hand?LABEL[g]:'no hand';
+  $('ringFg').style.strokeDashoffset=String(113.1*(1-st.progress));
+  $('holdHint').textContent=st.progress>0?'Keep holding to send '+COMMANDS[st.candidate]:' ';
+  FINGERS.forEach(function(n){
+    var v=Math.round(b[n]*100);
+    barEls[n].style.width=v+'%'; valEls[n].textContent=v;
+    if(source==='cam'){sliders[n].value=v; outs[n].textContent=v;}
+  });
+  $('pSee').textContent=hand?('hand tracked, gesture: '+LABEL[g]):'no hand in view';
+  $('pDecide').textContent='mode '+mode;
+  $('pAct').textContent=ACT_TEXT[mode];
+  if(logDirty){
+    logDirty=false;
+    var ol=$('log'); ol.textContent='';
+    logItems.slice(0,30).forEach(function(it){
+      var li=document.createElement('li'), tm=document.createElement('time'), tg=document.createElement('span'), tx=document.createElement('span');
+      tm.textContent=fmt(it.t); tg.className='tag '+it.tag; tg.textContent=it.tag; tx.textContent=it.text;
+      li.appendChild(tm); li.appendChild(tg); li.appendChild(tx); ol.appendChild(li);
+    });
+  }
+}
+
+/* ---------- main loop ---------- */
+function frame(){
+  requestAnimationFrame(frame);
+  var now=performance.now(), t=(now-t0)/1000;
+  var b,hand,yaw;
+  if(source==='cam'){b=camBends; hand=camHand; yaw=camYaw;} else {b=simBends; hand=true; yaw=simYaw;}
+  var g=hand?classify(b):'NONE';
+  var st=agent.step(now,{hand:hand,gesture:g});
+  var target=poseFor(st.mode,t,b,yaw);
+  if(target) applyPose(target,lerp(0.5,0.06,smoothAmount()));
+  if(renderer){updateCamera(); renderer.render(scene,camera);}
+  if(now-lastHud>70){lastHud=now; updateHud(st,b,g,hand);}
+}
+applyPose(poseFor('MANUAL',0,simBends,0),1);
+frame();
+})();
+</script>
+
+</html>

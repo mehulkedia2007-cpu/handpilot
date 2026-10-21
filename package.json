@@ -1,0 +1,18 @@
+{
+  "name": "handpilot",
+  "version": "0.1.0",
+  "description": "Real-time hand-gesture teleoperation of a 3D robot, in the browser.",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "dev": "http-server . -p 5173 -c-1 -o",
+    "test": "node --test \"tests/**/*.test.js\""
+  },
+  "devDependencies": {
+    "http-server": "14.1.1"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
