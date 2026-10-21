@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Agent, poseFor, blendPose, smoothingAlpha } from '../src/core/agent.js';
+import { Agent, poseFor, blendPose } from '../src/core/agent.js';
 
 // The agent never reads a real clock; we pass the time in. This helper feeds it
 // the same observation every `dt` ms for `ms` milliseconds, like frames at ~60 fps.
@@ -147,10 +147,10 @@ test('AUTO and GREET animate over time; IDLE faces forward', () => {
   assert.equal(poseFor('IDLE', 2, bends(0), 0.7).yaw, 0);
 });
 
-test('blendPose eases toward the target and smoothing slows it down', () => {
+test('blendPose eases toward the target', () => {
   const cur = { a: 0 };
   blendPose(cur, { a: 10 }, 0.5);
   assert.equal(cur.a, 5);
-  assert.equal(smoothingAlpha(0), 0.5);
-  assert.ok(smoothingAlpha(0.9) < smoothingAlpha(0.1));
+  blendPose(cur, { a: 10 }, 0.5);
+  assert.equal(cur.a, 7.5);
 });

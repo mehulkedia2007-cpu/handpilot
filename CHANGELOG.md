@@ -6,6 +6,7 @@ All notable changes to HandPilot are listed here, newest first.
 
 ### Phase 1: Pro hand tracking
 - P1.1: Camera switched from the legacy `@mediapipe/hands` script to the MediaPipe Gesture Recognizer (`@mediapipe/tasks-vision@0.10.35`), on the GPU with a CPU fallback. Recognition only runs when the video has a new frame. HandFrames now carry world landmarks, handedness (shown as a chip on the stage), palm position and depth, pinch, and MediaPipe's built-in gesture (shown under the gesture name). Confident built-in gestures drive the agent; the rule-based classifier is the fallback and still drives the simulator.
+- P1.2: One Euro filter (`src/core/filters.js`) with one filter per finger bend plus palm x/y/z and pinch, applied to both camera and simulator input. The Smoothing slider is replaced by **Min cutoff** and **Beta** sliders (defaults 1.0 and 1.0, tuned for 0–1 signals; the textbook beta of 0.01 is for pixel units and lagged about 12 frames here). The pose blend is now a fixed light ease. `smoothingAlpha` was removed from `core/agent.js`.
 
 ### Phase 0: Set up the project
 - P0.1: Repository skeleton, `package.json` with `dev` and `test` scripts, MIT licence, `.gitignore`.

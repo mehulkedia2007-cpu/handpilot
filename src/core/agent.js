@@ -114,6 +114,3 @@ export function blendPose(cur, target, alpha) {
   for (const k in cur) cur[k] = lerp(cur[k], target[k], alpha);
   return cur;
 }
-
-// Smoothing slider (0 none .. 1 max) to the per-frame blend factor.
-export function smoothingAlpha(amount) { return lerp(0.5, 0.06, amount); }

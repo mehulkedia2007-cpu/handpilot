@@ -2,7 +2,8 @@
 // input (simulator or camera) -> gesture -> agent -> pose -> 3D robot + UI.
 import { yawFromPalmX } from './core/hand.js';
 import { pickGesture } from './core/gestures.js';
-import { Agent, poseFor, blendPose, smoothingAlpha } from './core/agent.js';
+import { Agent, poseFor, blendPose } from './core/agent.js';
+import { createHandFilter } from './core/filters.js';
 import { createSimulator } from './input/simulator.js';
 import { createCamera, CAMERA_BLOCKED_MSG } from './input/camera.js';
 import { createHud } from './ui/hud.js';
@@ -26,8 +27,19 @@ const hud = createHud({
 const channels = createChannels($('channels'));
 buildGestureGuide($('glist'));
 
-const smooth = $('smooth');
-smooth.addEventListener('input', () => { $('smoothOut').textContent = smooth.value; });
+/* ---------- jitter filter ---------- */
+// The One Euro filter does the real smoothing, so the pose only needs a light
+// ease, mainly to soften jumps when the mode changes.
+const POSE_ALPHA = 0.35;
+const handFilter = createHandFilter({ minCutoff: 1.0, beta: 1.0 });
+function bindFilterSlider(name) {
+  const input = $(name), out = $(name + 'Out');
+  const apply = () => { out.textContent = Number(input.value).toFixed(1); handFilter.setParams({ [name]: Number(input.value) }); };
+  input.addEventListener('input', apply);
+  apply();
+}
+bindFilterSlider('minCutoff');
+bindFilterSlider('beta');
 
 /* ---------- inputs ---------- */
 const sim = createSimulator($('sliders'), $('presets'));
@@ -105,12 +117,12 @@ let lastHud = 0;
 function frame() {
   requestAnimationFrame(frame);
   const now = performance.now(), t = (now - t0) / 1000;
-  const hf = source === 'cam' ? cam.read() : sim.read(now);
+  const hf = handFilter.filter(source === 'cam' ? cam.read() : sim.read(now));
   const hand = hf.present, b = hf.bends;
   const g = pickGesture(hf);
   const st = agent.step(now, { hand, gesture: g });
   const target = poseFor(st.mode, t, b, yawFromPalmX(hf.palm.x));
-  if (target) applyPose(target, smoothingAlpha(smooth.value / 100));
+  if (target) applyPose(target, POSE_ALPHA);
   if (stage) stage.render();
   // The DOM is slow compared with WebGL, so the panels refresh about 14 times a second, not every frame.
   if (now - lastHud > 70) {
