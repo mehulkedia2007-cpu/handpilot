@@ -21,6 +21,13 @@ Run `npm test` first; it must pass. Then go through this list in Chrome at the e
 - [ ] Change the filter sliders, reload: the values are kept. **Reset to defaults** puts them back to 1.0 / 1.0, and they stay after a reload.
 - [ ] In a private window the app still works (settings may or may not persist, but nothing breaks).
 
+## Robot arm (Phase 2)
+- [ ] The **Humanoid / Arm** switch in the header swaps the robot; the pressed button is highlighted.
+- [ ] With **Arm** selected, the **Arm joints** panel appears; with Humanoid it is hidden.
+- [ ] Each arm slider moves its joint: Base turns, Shoulder lifts, Elbow folds, Wrist tilts, Grip closes the fingers.
+- [ ] **Park arm** returns the arm and its sliders to the folded pose.
+- [ ] Select Arm and reload: the arm is still selected. **Reset to defaults** goes back to Humanoid.
+
 ## Camera (Chrome, Edge, Safari)
 - [ ] **Start camera** asks for permission, then shows the preview with the hand skeleton. The note says whether the model runs on the GPU or CPU.
 - [ ] The stage shows a **Left hand** / **Right hand** chip that matches the hand you actually raised.

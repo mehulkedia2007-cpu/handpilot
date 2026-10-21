@@ -28,7 +28,10 @@
       <h1>HandPilot</h1>
       <p class="sub">Your fingers drive a robot. A small agent watches, decides and acts, and takes over when you stop.</p>
     </div>
-    <span class="chip" id="srcChip">Source: simulator</span>
+    <div class="hdr-right">
+      <div class="seg" id="robotSwitch" role="group" aria-label="Robot"></div>
+      <span class="chip" id="srcChip">Source: simulator</span>
+    </div>
   </header>
 
   <main class="grid">
@@ -58,6 +61,12 @@
       <div class="ph"><span class="k">Simulator</span><span class="chip">0 = straight, 100 = curled</span></div>
       <div class="presets" id="presets"></div>
       <div class="sliders" id="sliders"></div>
+      <div class="tune" id="armJoints" hidden>
+        <div class="ph"><span class="k">Arm joints</span><span class="chip">debug</span></div>
+        <div class="sliders" id="jointSliders"></div>
+        <div class="row"><button class="btn" id="btnPark" type="button">Park arm</button></div>
+        <p class="note">Drive each joint of the arm by hand. Hand control of the arm arrives with inverse kinematics.</p>
+      </div>
       <div class="tune">
         <div class="ph"><span class="k">Jitter filter</span><span class="chip">One Euro</span></div>
         <div class="sliders">

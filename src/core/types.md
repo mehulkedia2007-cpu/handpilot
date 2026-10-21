@@ -52,3 +52,17 @@ Pose = {
   bob       // small vertical bounce (metres) used by the animations
 }
 ```
+
+## ArmPose
+
+Joint angles for the robot arm, in radians (grip is 0–1). Limits and sizes are in `core/armSpec.js`.
+
+```js
+ArmPose = {
+  yaw,       // base turn; 0 faces the viewer
+  shoulder,  // upper arm above horizontal; 0 = level
+  elbow,     // forearm fold down from the upper arm's line; 0 = straight
+  wrist,     // gripper tilt; -(shoulder - elbow) keeps it level
+  grip       // 0 = open, 1 = closed
+}
+```

@@ -83,3 +83,54 @@ export function buildGestureGuide(el) {
     li.append(glyph, d); el.appendChild(li);
   }
 }
+
+// Header switch between the robots. Buttons with aria-pressed, so screen readers
+// announce which robot is on.
+const ROBOT_NAMES = { humanoid: 'Humanoid', arm: 'Arm' };
+export function createRobotSwitch(el, robots, current, onChange) {
+  const btns = {};
+  const show = (r) => { for (const k of robots) btns[k].setAttribute('aria-pressed', String(k === r)); };
+  for (const r of robots) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'seg-btn'; b.textContent = ROBOT_NAMES[r];
+    b.addEventListener('click', () => { show(r); onChange(r); });
+    el.appendChild(b); btns[r] = b;
+  }
+  show(current);
+  return { show };
+}
+
+// Debug sliders for the arm, one per joint. Angles are shown in degrees because
+// they are easier to read, but the pose itself stays in radians.
+const JOINT_NAMES = { yaw: 'Base', shoulder: 'Shoulder', elbow: 'Elbow', wrist: 'Wrist', grip: 'Grip' };
+export function createJointPanel(el, limits, pose, onChange) {
+  const inputs = {}, outs = {};
+  // Grip is 0–1, so it is shown as a percentage instead of degrees.
+  const toUi = (j, v) => Math.round(j === 'grip' ? v * 100 : v * 180 / Math.PI);
+  const fromUi = (j, v) => (j === 'grip' ? v / 100 : v * Math.PI / 180);
+  for (const j of Object.keys(limits)) {
+    const [lo, hi] = limits[j];
+    const row = document.createElement('div'); row.className = 'srow joint';
+    row.innerHTML = `<label for="j_${j}">${JOINT_NAMES[j]}</label><input id="j_${j}" type="range" min="${toUi(j, lo)}" max="${toUi(j, hi)}" step="1"><output></output>`;
+    el.appendChild(row);
+    inputs[j] = row.querySelector('input'); outs[j] = row.querySelector('output');
+    inputs[j].addEventListener('input', () => {
+      outs[j].textContent = inputs[j].value + (j === 'grip' ? '%' : '°');
+      onChange(read());
+    });
+  }
+  // Read every slider, so the pose sent out always matches what is on screen.
+  function read() {
+    const p = {};
+    for (const k of Object.keys(inputs)) p[k] = fromUi(k, Number(inputs[k].value));
+    return p;
+  }
+  function show(p) {
+    for (const j of Object.keys(inputs)) {
+      inputs[j].value = toUi(j, p[j]);
+      outs[j].textContent = inputs[j].value + (j === 'grip' ? '%' : '°');
+    }
+  }
+  show(pose);
+  return { show };
+}

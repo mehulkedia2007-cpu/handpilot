@@ -4,6 +4,9 @@ All notable changes to HandPilot are listed here, newest first.
 
 ## [Unreleased]
 
+### Phase 2: Robot arm teleoperation
+- P2.1: Robot arm model (`src/scene/arm.js`): base yaw, shoulder, elbow and wrist pitch, and a two-finger gripper, built from nested Groups. Its lengths, joint limits and parked pose live in `src/core/armSpec.js` so the IK solver (P2.3) can share them. A **Humanoid / Arm** switch in the header picks the robot and is saved in settings. With the arm selected, an **Arm joints** debug panel drives each joint, and **Park arm** resets it.
+
 ### Phase 1: Pro hand tracking
 - P1.1: Camera switched from the legacy `@mediapipe/hands` script to the MediaPipe Gesture Recognizer (`@mediapipe/tasks-vision@0.10.35`), on the GPU with a CPU fallback. Recognition only runs when the video has a new frame. HandFrames now carry world landmarks, handedness (shown as a chip on the stage), palm position and depth, pinch, and MediaPipe's built-in gesture (shown under the gesture name). Confident built-in gestures drive the agent; the rule-based classifier is the fallback and still drives the simulator.
 - P1.2: One Euro filter (`src/core/filters.js`) with one filter per finger bend plus palm x/y/z and pinch, applied to both camera and simulator input. The Smoothing slider is replaced by **Min cutoff** and **Beta** sliders (defaults 1.0 and 1.0, tuned for 0–1 signals; the textbook beta of 0.01 is for pixel units and lagged about 12 frames here). The pose blend is now a fixed light ease. `smoothingAlpha` was removed from `core/agent.js`.

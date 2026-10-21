@@ -5,11 +5,12 @@ import { pickGesture } from './core/gestures.js';
 import { Agent, poseFor, blendPose } from './core/agent.js';
 import { createHandFilter } from './core/filters.js';
 import { PerfMeter } from './core/perf.js';
-import { loadSettings, saveSettings, defaultSettings } from './core/settings.js';
+import { loadSettings, saveSettings, defaultSettings, ROBOTS } from './core/settings.js';
+import { ARM_LIMITS, defaultArmPose, clampArmPose } from './core/armSpec.js';
 import { createSimulator } from './input/simulator.js';
 import { createCamera, CAMERA_BLOCKED_MSG } from './input/camera.js';
 import { createHud } from './ui/hud.js';
-import { createChannels, createAgentPanel, buildGestureGuide } from './ui/panels.js';
+import { createChannels, createAgentPanel, buildGestureGuide, createRobotSwitch, createJointPanel } from './ui/panels.js';
 
 const $ = (id) => document.getElementById(id);
 const t0 = performance.now();
@@ -65,6 +66,7 @@ $('btnDefaults').addEventListener('click', () => {
   persist();
   showFilter();
   cam.setCal(settings.calibration);
+  showRobot();
   panel.add('ACT', 'settings reset to defaults');
 });
 let source = 'sim';
@@ -117,11 +119,14 @@ try {
 /* ---------- 3D scene ---------- */
 // Loaded dynamically so that if the Three.js CDN fails, the rest of the app
 // (simulator, agent, panels) still works and we can show a clear message.
-let stage = null, robot = null;
+let stage = null, robot = null, arm = null;
 try {
-  const [{ createStage }, { buildHumanoid }] = await Promise.all([import('./scene/stage.js'), import('./scene/humanoid.js')]);
+  const [{ createStage }, { buildHumanoid }, { buildArm }] = await Promise.all([
+    import('./scene/stage.js'), import('./scene/humanoid.js'), import('./scene/arm.js'),
+  ]);
   stage = createStage($('stage'));
   robot = buildHumanoid(stage.scene);
+  arm = buildArm(stage.scene);
 } catch (err) {
   console.warn(err);
   const m = $('stageMsg');
@@ -134,6 +139,28 @@ function applyPose(target, alpha) {
   blendPose(cur, target, alpha);
   if (robot) robot.apply(cur);
 }
+
+/* ---------- robot choice + arm joints ---------- */
+// Both robots stay in the scene and only one is visible, so switching is instant.
+// For now the arm is driven by the debug sliders; IK takes over in P2.3.
+let armPose = defaultArmPose();
+const joints = createJointPanel($('jointSliders'), ARM_LIMITS, armPose, (p) => { armPose = clampArmPose(p); });
+$('btnPark').addEventListener('click', () => { armPose = defaultArmPose(); joints.show(armPose); });
+
+function showRobot() {
+  const isArm = settings.robot === 'arm';
+  if (robot) robot.setVisible(!isArm);
+  if (arm) arm.setVisible(isArm);
+  $('armJoints').hidden = !isArm;
+  robotSwitch.show(settings.robot);
+}
+const robotSwitch = createRobotSwitch($('robotSwitch'), ROBOTS, settings.robot, (r) => {
+  settings.robot = r;
+  persist();
+  showRobot();
+  panel.add('ACT', 'robot switched to ' + r);
+});
+showRobot();
 
 /* ---------- main loop ---------- */
 let lastHud = 0;
@@ -148,6 +175,7 @@ function frame() {
   const st = agent.step(now, { hand, gesture: g });
   const target = poseFor(st.mode, t, b, yawFromPalmX(hf.palm.x));
   if (target) applyPose(target, POSE_ALPHA);
+  if (arm && settings.robot === 'arm') arm.apply(armPose);
   if (stage) stage.render();
   cam.perf.update(now);
   if (renderPerf.update(now)) hud.perf(renderPerf, source === 'cam' ? cam.perf : null);

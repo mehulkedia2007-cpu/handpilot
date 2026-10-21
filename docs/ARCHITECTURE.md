@@ -21,7 +21,8 @@ Simulator sliders ────────────────────�
 ```
 
 Later phases add these pieces:
-- `core/ik.js` and `scene/arm.js` (Phase 2)
+- `core/armSpec.js` and `scene/arm.js` (P2.1, done): the arm's sizes and joint limits, and its 3D model
+- `core/ik.js` (Phase 2)
 - `core/stacking.js` (Phase 3)
 - `core/knn.js` and `core/motion.js` (Phase 4)
 - the LLM agent and `server/` (Phase 5)

@@ -26,6 +26,7 @@
 - **Works without a camera.** A slider simulator with presets drives the same pipeline, so you can try every gesture without a webcam.
 - **Calibration and saved settings.** "Set open hand" and "Set fist" fit the bend scale to your hand. Calibration and filter settings are saved in your browser, with a Reset to defaults button.
 - **Live agent log** showing every decision and why it was made.
+- **A robot arm (Phase 2, in progress).** Switch between Humanoid and Arm in the header. The arm has a turning base, shoulder, elbow and wrist joints and a two-finger gripper; for now a debug panel drives each joint, and hand control with inverse kinematics comes next.
 
 MediaPipe's built-in gestures drive the commands when it is confident; otherwise the rule-based classifier on the bends decides (and always does for the simulator).
 

@@ -77,3 +77,10 @@ test('defaults are a fresh copy each time', () => {
   assert.equal(defaultSettings().calibration.open.thumb, DEFAULT_CAL.open.thumb);
   assert.equal(defaultSettings().gestureMap.FIST, 'HOLD');
 });
+
+test('the chosen robot is saved and loaded', () => {
+  const store = fakeStorage();
+  const s = defaultSettings(); s.robot = 'arm';
+  saveSettings(store, s);
+  assert.equal(loadSettings(store).robot, 'arm');
+});

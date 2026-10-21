@@ -53,5 +53,7 @@ export function buildHumanoid(scene) {
     root.position.y = p.bob;
   }
 
-  return { apply };
+  function setVisible(on) { root.visible = on; }
+
+  return { apply, setVisible };
 }
