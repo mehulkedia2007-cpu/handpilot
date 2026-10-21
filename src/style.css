@@ -57,6 +57,7 @@ h1{font:700 32px/1 var(--font-display);letter-spacing:.05em;text-transform:upper
 .ring circle{fill:none;stroke-width:4}
 .ring-bg{stroke:var(--line)}
 .ring-fg{stroke:var(--accent);stroke-dasharray:113.1;stroke-dashoffset:113.1;stroke-linecap:round}
+.hand-chip{align-self:flex-start;background:var(--scrim);color:var(--fg)}
 .gname{font:700 18px/1.1 var(--font-display);letter-spacing:.06em;text-transform:uppercase}
 .stage-msg{position:absolute;inset:0;z-index:3;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;background:var(--stage);color:var(--muted)}
 

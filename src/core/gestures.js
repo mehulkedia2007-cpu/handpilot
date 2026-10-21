@@ -15,6 +15,23 @@ export function classify(b) {
   return 'NONE';
 }
 
+// MediaPipe's built-in gesture labels mapped to our gesture names. Thumb_Down and
+// ILoveYou are recognised and shown, but are not commands yet (Phase 4 lets you map them).
+export const BUILTIN = {
+  Closed_Fist: 'FIST', Open_Palm: 'OPEN', Victory: 'PEACE', Thumb_Up: 'THUMBS_UP',
+  Pointing_Up: 'POINT', Thumb_Down: 'THUMBS_DOWN', ILoveYou: 'I_LOVE_YOU',
+};
+
+// Pick the gesture for one HandFrame. The camera's built-in model is trained on
+// thousands of hands, so we trust it when it is confident. Otherwise (and always for
+// the simulator, which has no built-in label) the rule-based classifier decides.
+export function pickGesture(hf, minScore = 0.6) {
+  if (!hf.present) return 'NONE';
+  const g = BUILTIN[hf.builtInGesture];
+  if (g && (hf.builtInScore ?? 0) >= minScore) return g;
+  return classify(hf.bends);
+}
+
 // Which agent mode each command gesture asks for. POINT and NONE are not commands.
 export const COMMANDS = { FIST: 'HOLD', OPEN: 'MANUAL', PEACE: 'AUTO', THUMBS_UP: 'GREET' };
 
@@ -22,4 +39,5 @@ export const COMMANDS = { FIST: 'HOLD', OPEN: 'MANUAL', PEACE: 'AUTO', THUMBS_UP
 export const SAYS = { FIST: 'fist', OPEN: 'open palm', PEACE: 'peace sign', THUMBS_UP: 'thumbs up' };
 
 // Display names for the HUD.
-export const LABEL = { NONE: 'none', FIST: 'fist', OPEN: 'open palm', PEACE: 'peace sign', THUMBS_UP: 'thumbs up', POINT: 'point' };
+export const LABEL = { NONE: 'none', FIST: 'fist', OPEN: 'open palm', PEACE: 'peace sign', THUMBS_UP: 'thumbs up', POINT: 'point',
+  THUMBS_DOWN: 'thumbs down', I_LOVE_YOU: 'I love you' };

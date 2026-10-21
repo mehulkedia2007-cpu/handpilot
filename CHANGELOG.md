@@ -4,6 +4,9 @@ All notable changes to HandPilot are listed here, newest first.
 
 ## [Unreleased]
 
+### Phase 1: Pro hand tracking
+- P1.1: Camera switched from the legacy `@mediapipe/hands` script to the MediaPipe Gesture Recognizer (`@mediapipe/tasks-vision@0.10.35`), on the GPU with a CPU fallback. Recognition only runs when the video has a new frame. HandFrames now carry world landmarks, handedness (shown as a chip on the stage), palm position and depth, pinch, and MediaPipe's built-in gesture (shown under the gesture name). Confident built-in gestures drive the agent; the rule-based classifier is the fallback and still drives the simulator.
+
 ### Phase 0: Set up the project
 - P0.1: Repository skeleton, `package.json` with `dev` and `test` scripts, MIT licence, `.gitignore`.
 - P0.2: Split the prototype into ES modules (`src/core`, `src/input`, `src/scene`, `src/ui`, `src/main.js`). Three.js r128 global script replaced by `three@0.160.0` through an import map, with lighting and colour settings adjusted so the robot looks the same. Added keyboard orbit (arrow keys, +/-) on the 3D view.

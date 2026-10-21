@@ -1,15 +1,19 @@
-// Webcam + MediaPipe Hands. Turns video frames into HandFrames.
-// Phase 0 keeps the prototype's legacy @mediapipe/hands library; Phase 1 swaps
-// it for the newer Gesture Recognizer from @mediapipe/tasks-vision.
-import { FINGERS, lerp, fingerRatios, bendsFromRatios, DEFAULT_CAL, copyCal, isUsableCal } from '../core/hand.js';
+// Webcam + MediaPipe Gesture Recognizer (@mediapipe/tasks-vision).
+// Turns video frames into HandFrames: 21 landmarks, world landmarks in metres,
+// which hand it is, and MediaPipe's own guess at the gesture.
+import { FINGERS, lerp, fingerRatios, bendsFromRatios, palmFromLandmarks, pinchFromLandmarks, DEFAULT_CAL, copyCal, isUsableCal } from '../core/hand.js';
 
-const HANDS_BASE = 'https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/';
+// The WASM files must come from the same version as the JS in the import map (index.html).
+const VISION_VERSION = '0.10.35';
+const WASM_URL = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${VISION_VERSION}/wasm`;
+const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/1/gesture_recognizer.task';
 const CAL_KEY = 'gesture-robot-cal';
 // Pairs of landmark indexes to draw as bones on the preview.
 const LINKS = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
 const TIPS = [4, 8, 12, 16, 20];
 
 export const CAMERA_BLOCKED_MSG = 'The camera is blocked in this view. Use the simulator, or open HandPilot from localhost or its HTTPS link in Chrome or Edge.';
+export const MODEL_FAILED_MSG = 'The hand model could not load. Check your connection and try again.';
 
 export function describeCamError(e) {
   const n = e && e.name;
@@ -19,13 +23,36 @@ export function describeCamError(e) {
   return 'The camera could not start. Use the simulator instead.';
 }
 
-// The legacy library is a classic script, not an ES module, so it is injected with a <script> tag.
-function loadScript(src) {
-  return new Promise((res, rej) => {
-    const s = document.createElement('script');
-    s.src = src; s.onload = res; s.onerror = () => rej(new Error('load failed'));
-    document.head.appendChild(s);
-  });
+// MediaPipe labels handedness as if the image were mirrored (a selfie). Our video
+// frames are not mirrored (only the preview is, with CSS), so the label is swapped.
+function flipHandedness(label) {
+  if (label === 'Left') return 'Right';
+  if (label === 'Right') return 'Left';
+  return null;
+}
+
+// Loaded once and kept, so stopping and restarting the camera is instant.
+// The GPU is much faster, but some browsers or drivers can't create a WebGL
+// context for it, so we fall back to the CPU instead of failing.
+let recognizerPromise = null;
+function loadRecognizer() {
+  recognizerPromise ??= (async () => {
+    const { FilesetResolver, GestureRecognizer } = await import('@mediapipe/tasks-vision');
+    const vision = await FilesetResolver.forVisionTasks(WASM_URL);
+    const options = (delegate) => ({
+      baseOptions: { modelAssetPath: MODEL_URL, delegate },
+      runningMode: 'VIDEO', numHands: 1,
+    });
+    try {
+      return { recognizer: await GestureRecognizer.createFromOptions(vision, options('GPU')), delegate: 'GPU' };
+    } catch (err) {
+      console.warn('GPU delegate failed, falling back to CPU', err);
+      return { recognizer: await GestureRecognizer.createFromOptions(vision, options('CPU')), delegate: 'CPU' };
+    }
+  })();
+  // A failed load shouldn't be cached forever: let the next click try again.
+  recognizerPromise.catch(() => { recognizerPromise = null; });
+  return recognizerPromise;
 }
 
 function loadCal() {
@@ -39,11 +66,20 @@ function saveCal(cal) { try { localStorage.setItem(CAL_KEY, JSON.stringify(cal))
 
 export function createCamera(video, overlay) {
   const octx = overlay.getContext('2d');
-  let stream = null, hands = null, running = false, busy = false;
+  let stream = null, recognizer = null, delegate = null, running = false;
+  let lastVideoTime = -1;
   let cal = loadCal();
-  let ratios = null;                // smoothed raw ratios, kept for calibration
-  let present = false, landmarks = null, palmX = 0.5;
-  const bends = { thumb: 0.5, index: 0.8, middle: 0.8, ring: 0.8, pinky: 0.8 };
+  let calRatios = null;   // lightly averaged raw ratios, used only when calibrating
+  let frame = emptyFrame(0);
+
+  function emptyFrame(t) {
+    return {
+      present: false, landmarks: null, world: null, handedness: null,
+      bends: { thumb: 0.5, index: 0.8, middle: 0.8, ring: 0.8, pinky: 0.8 },
+      palm: { x: 0.5, y: 0.5, z: 0 }, pinch: null,
+      builtInGesture: null, builtInScore: 0, t,
+    };
+  }
 
   function stopStream() {
     if (stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; }
@@ -61,52 +97,63 @@ export function createCamera(video, overlay) {
     } catch (e) { throw new Error(describeCamError(e)); }
     video.srcObject = stream;
     try { await video.play(); } catch (_) { /* autoplay quirks; frames still arrive */ }
-    onStatus('Loading', 'Loading the hand model. The first time takes a few seconds.');
+    onStatus('Loading', 'Loading the gesture model. The first time takes a few seconds.');
     try {
-      if (!window.Hands) await loadScript(HANDS_BASE + 'hands.js');
-      hands = new window.Hands({ locateFile: (f) => HANDS_BASE + f });
-      hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.5 });
-      hands.onResults(onResults);
-      await hands.initialize();
-    } catch (_) {
+      ({ recognizer, delegate } = await loadRecognizer());
+    } catch (err) {
+      console.warn(err);
       stopStream();
-      throw new Error('The hand model could not load. Check your connection and try again.');
+      throw new Error(MODEL_FAILED_MSG);
     }
-    running = true; present = false;
+    running = true; lastVideoTime = -1; frame = emptyFrame(performance.now());
     loop();
   }
 
   function stop() {
     running = false; stopStream();
-    try { if (hands && hands.close) hands.close(); } catch (_) { /* already closed */ }
-    hands = null; present = false; landmarks = null;
+    frame = emptyFrame(performance.now());
     octx.clearRect(0, 0, overlay.width, overlay.height);
   }
 
-  // One recognition at a time: if the model is still busy, skip this video frame.
-  async function loop() {
+  // The browser may draw the page at 60+ fps while the camera only delivers
+  // 30 new frames a second. Running the model twice on the same frame wastes
+  // time, so we only call it when the video has actually moved on.
+  function loop() {
     if (!running) return;
-    if (video.readyState >= 2 && !busy && hands) {
-      busy = true;
-      try { await hands.send({ image: video }); } catch (_) { /* dropped frame */ }
-      busy = false;
+    if (video.readyState >= 2 && video.currentTime !== lastVideoTime) {
+      lastVideoTime = video.currentTime;
+      const ts = performance.now();
+      try {
+        // Timestamps must always increase; performance.now() guarantees that.
+        onResults(recognizer.recognizeForVideo(video, ts), ts);
+      } catch (err) { console.warn('recognition failed for one frame', err); }
     }
-    if (running) requestAnimationFrame(loop);
+    requestAnimationFrame(loop);
   }
 
-  function onResults(res) {
+  function onResults(res, ts) {
     if (overlay.width !== video.videoWidth && video.videoWidth) { overlay.width = video.videoWidth; overlay.height = video.videoHeight; }
     octx.clearRect(0, 0, overlay.width, overlay.height);
-    const lm = res.multiHandLandmarks && res.multiHandLandmarks[0];
-    present = !!lm; landmarks = lm || null;
-    if (!lm) return;
+    const lm = res.landmarks && res.landmarks[0];
+    if (!lm) { frame = emptyFrame(ts); return; }
     drawHand(lm);
-    // Light smoothing on the ratios so the bends don't jitter. Phase 1 replaces this with a One Euro filter.
     const raw = fingerRatios(lm);
-    ratios = ratios || raw;
-    for (const n of FINGERS) ratios[n] = lerp(ratios[n], raw[n], 0.5);
-    Object.assign(bends, bendsFromRatios(ratios, cal));
-    palmX = lerp(palmX, lm[9].x, 0.4);
+    calRatios = calRatios || { ...raw };
+    for (const n of FINGERS) calRatios[n] = lerp(calRatios[n], raw[n], 0.5);
+    const top = res.gestures && res.gestures[0] && res.gestures[0][0];
+    const hand = res.handedness && res.handedness[0] && res.handedness[0][0];
+    frame = {
+      present: true,
+      landmarks: lm,
+      world: (res.worldLandmarks && res.worldLandmarks[0]) || null,
+      handedness: hand ? flipHandedness(hand.categoryName) : null,
+      bends: bendsFromRatios(raw, cal),
+      palm: palmFromLandmarks(lm),
+      pinch: pinchFromLandmarks(lm),
+      builtInGesture: top ? top.categoryName : null,
+      builtInScore: top ? top.score : 0,
+      t: ts,
+    };
   }
 
   function drawHand(lm) {
@@ -123,9 +170,9 @@ export function createCamera(video, overlay) {
 
   // which = 'open' or 'closed'. Returns a message for the user.
   function calibrate(which) {
-    if (!ratios || !present) return 'Show your hand to the camera first, then press the button.';
+    if (!calRatios || !frame.present) return 'Show your hand to the camera first, then press the button.';
     const next = copyCal(cal);
-    for (const n of FINGERS) next[which][n] = ratios[n];
+    for (const n of FINGERS) next[which][n] = calRatios[n];
     if (!isUsableCal(next)) return 'That reading is too close to the other pose. Open your hand fully or make a tight fist, then try again.';
     cal = next; saveCal(cal);
     return (which === 'open' ? 'Open hand' : 'Fist') + ' saved. Straight fingers now read 0%, curled fingers 100%.';
@@ -136,13 +183,11 @@ export function createCamera(video, overlay) {
   return {
     start, stop, calibrate, resetCal,
     get running() { return running; },
-    read(now) {
-      return {
-        present, landmarks, world: null, handedness: null,
-        bends: { ...bends },
-        palm: { x: palmX, y: 0.5, z: 0 },
-        pinch: null, builtInGesture: null, t: now,
-      };
+    get delegate() { return delegate; },
+    // t is the time of the last recognition, not the time of this read, so the
+    // filter downstream can tell a new camera frame from a repeat of the old one.
+    read() {
+      return { ...frame, bends: { ...frame.bends }, palm: { ...frame.palm } };
     },
   };
 }

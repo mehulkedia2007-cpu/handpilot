@@ -51,3 +51,17 @@ export function isUsableCal(cal, minGap = 0.25) {
 // The centre of the image means facing forward.
 export function yawFromPalmX(x) { return (0.5 - x) * 1.6; }
 export function palmXFromYaw(yaw) { return 0.5 - yaw / 1.6; }
+
+// Palm position for a HandFrame. x and y come from the middle-finger knuckle (point 9),
+// which sits near the centre of the palm and moves less than the fingertips.
+// z is the palm's width in the image: a hand closer to the camera looks wider,
+// so it is a cheap stand-in for depth (bigger = closer, roughly 0.05 to 0.3).
+export function palmFromLandmarks(lm) {
+  return { x: lm[9].x, y: lm[9].y, z: Math.hypot(lm[5].x - lm[17].x, lm[5].y - lm[17].y) };
+}
+
+// Thumb tip to index tip, divided by palm width so it doesn't depend on hand size.
+// About 0 when the tips touch, above 1 when the hand is open.
+export function pinchFromLandmarks(lm) {
+  return dist(lm[4], lm[8]) / dist(lm[5], lm[17]);
+}

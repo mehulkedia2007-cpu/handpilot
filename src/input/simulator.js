@@ -48,7 +48,7 @@ export function createSimulator(slidersEl, presetsEl) {
         present: true, landmarks: null, world: null, handedness: null,
         bends: { ...bends },
         palm: { x: palmXFromYaw(yaw), y: 0.5, z: 0 },
-        pinch: null, builtInGesture: null, t: now,
+        pinch: null, builtInGesture: null, builtInScore: 0, t: now,
       };
     },
     // While the camera drives, the finger sliders are disabled and just display its values.

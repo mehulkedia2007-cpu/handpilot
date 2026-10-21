@@ -1,7 +1,7 @@
 // Wires everything together and runs the main loop:
 // input (simulator or camera) -> gesture -> agent -> pose -> 3D robot + UI.
 import { yawFromPalmX } from './core/hand.js';
-import { classify } from './core/gestures.js';
+import { pickGesture } from './core/gestures.js';
 import { Agent, poseFor, blendPose, smoothingAlpha } from './core/agent.js';
 import { createSimulator } from './input/simulator.js';
 import { createCamera, CAMERA_BLOCKED_MSG } from './input/camera.js';
@@ -21,6 +21,7 @@ panel.add('ACT', 'copy finger bends to joints');
 const hud = createHud({
   modeBadge: $('modeBadge'), gestureBox: $('gestureBox'), modeName: $('modeName'), modeDesc: $('modeDesc'),
   gestureName: $('gestureName'), ringFg: $('ringFg'), holdHint: $('holdHint'),
+  handChip: $('handChip'), builtInName: $('builtInName'),
 });
 const channels = createChannels($('channels'));
 buildGestureGuide($('glist'));
@@ -50,7 +51,7 @@ async function startCamera() {
   }
   source = 'cam';
   agent.lastSeen = performance.now();   // give the user time to raise a hand before IDLE kicks in
-  setCam('Live', 'Show your hand to the camera. Straight fingers are 0%, curled fingers are 100%. Use the buttons below to calibrate to your hand.', 'on');
+  setCam('Live', `Show your hand to the camera. Straight fingers are 0%, curled fingers are 100%. Use the buttons below to calibrate to your hand. (Model running on the ${cam.delegate}.)`, 'on');
   $('btnCam').hidden = true; $('btnStop').hidden = false; $('calRow').hidden = false; $('previewEmpty').hidden = true;
   $('srcChip').textContent = 'Source: camera';
   sim.setLocked(true);
@@ -104,9 +105,9 @@ let lastHud = 0;
 function frame() {
   requestAnimationFrame(frame);
   const now = performance.now(), t = (now - t0) / 1000;
-  const hf = source === 'cam' ? cam.read(now) : sim.read(now);
+  const hf = source === 'cam' ? cam.read() : sim.read(now);
   const hand = hf.present, b = hf.bends;
-  const g = hand ? classify(b) : 'NONE';
+  const g = pickGesture(hf);
   const st = agent.step(now, { hand, gesture: g });
   const target = poseFor(st.mode, t, b, yawFromPalmX(hf.palm.x));
   if (target) applyPose(target, smoothingAlpha(smooth.value / 100));
@@ -114,7 +115,7 @@ function frame() {
   // The DOM is slow compared with WebGL, so the panels refresh about 14 times a second, not every frame.
   if (now - lastHud > 70) {
     lastHud = now;
-    hud.update(st, g, hand);
+    hud.update(st, g, hf);
     channels.update(b);
     if (source === 'cam') sim.display(b);
     panel.update(st.mode, g, hand);

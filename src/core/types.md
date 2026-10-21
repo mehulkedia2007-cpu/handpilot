@@ -8,13 +8,14 @@ One frame of hand input. Both `input/camera.js` and `input/simulator.js` produce
 HandFrame = {
   present: boolean,                 // is a hand in view? (the simulator is always true)
   landmarks: [{x,y,z}] | null,      // 21 image-space points, 0–1 (camera only)
-  world: [{x,y,z}] | null,          // 21 world-space points in metres (Phase 1, camera only)
-  handedness: "Left"|"Right"|null,  // Phase 1
+  world: [{x,y,z}] | null,          // 21 world-space points in metres, origin near the hand's centre (camera only)
+  handedness: "Left"|"Right"|null,  // the user's real hand (camera only)
   bends: {thumb, index, middle, ring, pinky},  // 0 = straight, 1 = curled
-  palm: {x, y, z},                  // normalised 0–1; Phase 0 only uses x (it turns the body)
-  pinch: number | null,             // Phase 2; null until then
-  builtInGesture: string | null,    // Phase 1: MediaPipe label such as "Closed_Fist"
-  t: number                         // timestamp in ms (performance.now())
+  palm: {x, y, z},                  // x, y: middle knuckle in the image (0–1); z: palm width in the image, bigger = closer
+  pinch: number | null,             // thumb-tip to index-tip / palm width; ~0 touching (camera only, used in Phase 2)
+  builtInGesture: string | null,    // MediaPipe label such as "Closed_Fist" or "None" (camera only)
+  builtInScore: number,             // MediaPipe's confidence in that label, 0–1
+  t: number                         // ms (performance.now()). Camera: time of the recognition, so repeats keep the same t
 }
 ```
 
@@ -23,7 +24,7 @@ HandFrame = {
 What `Agent.step(now, obs)` receives each frame:
 
 ```js
-obs = { hand: boolean, gesture: "FIST"|"OPEN"|"PEACE"|"THUMBS_UP"|"POINT"|"NONE" }
+obs = { hand: boolean, gesture: "FIST"|"OPEN"|"PEACE"|"THUMBS_UP"|"POINT"|"THUMBS_DOWN"|"I_LOVE_YOU"|"NONE" }
 ```
 
 ## AgentState

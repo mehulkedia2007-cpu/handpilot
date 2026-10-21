@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   FINGERS, clamp, lerp, dist, DEFAULT_CAL, copyCal, fingerRatios, bendFromRatio,
-  bendsFromRatios, isUsableCal, yawFromPalmX, palmXFromYaw,
+  bendsFromRatios, isUsableCal, yawFromPalmX, palmXFromYaw, palmFromLandmarks, pinchFromLandmarks,
 } from '../src/core/hand.js';
 
 // A fake hand: 21 points where we choose the wrist, knuckles and fingertips.
@@ -71,4 +71,22 @@ test('palm x and yaw convert back and forth; centre faces forward', () => {
   assert.equal(yawFromPalmX(0.5), 0);
   assert.ok(yawFromPalmX(0.2) > 0);
   for (const yaw of [-0.8, -0.3, 0, 0.4, 0.8]) assert.ok(Math.abs(yawFromPalmX(palmXFromYaw(yaw)) - yaw) < 1e-12);
+});
+
+test('palm position comes from the middle knuckle, and z grows as the hand gets bigger', () => {
+  const near = palmFromLandmarks(makeHand({ scale: 0.3, dx: 0.5, dy: 0.8 }));
+  const far = palmFromLandmarks(makeHand({ scale: 0.1, dx: 0.5, dy: 0.8 }));
+  assert.ok(Math.abs(near.x - (0.5 - 0.1 * 0.3)) < 1e-9);
+  assert.ok(Math.abs(near.y - (0.8 - 0.3)) < 1e-9);
+  assert.ok(near.z > far.z, `near ${near.z} should be wider than far ${far.z}`);
+});
+
+test('pinch is small when thumb and index tips touch, and does not depend on hand size', () => {
+  const lm = makeHand({ curl: 0 });
+  const open = pinchFromLandmarks(lm);
+  lm[4] = { ...lm[8] };                     // thumb tip on the index tip
+  assert.ok(pinchFromLandmarks(lm) < 1e-9);
+  assert.ok(open > 0.5);
+  const small = pinchFromLandmarks(makeHand({ curl: 0, scale: 0.2 }));
+  assert.ok(Math.abs(small - open) < 1e-9);
 });

@@ -36,6 +36,7 @@
       <div class="hud tl">
         <div class="mode" id="modeBadge" data-mode="MANUAL"><span class="dot"></span><span id="modeName">MANUAL</span></div>
         <div class="mode-desc" id="modeDesc">Robot mirrors your fingers</div>
+        <span class="chip hand-chip" id="handChip" hidden></span>
       </div>
       <div class="hud tr hint">Drag to orbit. Scroll to zoom.</div>
       <div class="hud bl" id="gestureBox" data-mode="MANUAL">
@@ -43,6 +44,7 @@
         <div>
           <div class="k">Gesture</div>
           <div class="gname" id="gestureName">none</div>
+          <div class="hint" id="builtInName" hidden></div>
           <div class="hint" id="holdHint">&nbsp;</div>
         </div>
       </div>
@@ -104,7 +106,7 @@
 
   <section class="pipeline" aria-label="How it works">
     <div class="step"><b>Webcam</b><span>Video frames from your camera.</span></div>
-    <div class="step"><b>Hand landmarks</b><span>MediaPipe finds 21 points on your hand.</span></div>
+    <div class="step"><b>Hand landmarks</b><span>MediaPipe finds 21 points on your hand and names the gesture.</span></div>
     <div class="step"><b>Finger bend</b><span>Distances between points become five numbers, 0 to 100%.</span></div>
     <div class="step"><b>Agent</b><span>Sees the hand, decides a mode, acts on the robot.</span></div>
     <div class="step"><b>Robot joints</b><span>Three.js rotates shoulders, elbows, head and body.</span></div>

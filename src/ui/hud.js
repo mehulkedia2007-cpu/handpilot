@@ -15,13 +15,19 @@ const RING_LEN = 113.1;
 
 export function createHud(els) {
   return {
-    update(st, gesture, hand) {
+    // hf is the current HandFrame; handedness and the built-in label only exist for the camera.
+    update(st, gesture, hf) {
+      const hand = hf.present;
       els.modeBadge.dataset.mode = st.mode;
       els.gestureBox.dataset.mode = st.mode;
       els.modeName.textContent = st.mode;
       els.modeDesc.textContent = MODE_DESC[st.mode];
       els.gestureName.textContent = hand ? LABEL[gesture] : 'no hand';
       els.ringFg.style.strokeDashoffset = String(RING_LEN * (1 - st.progress));
+      els.handChip.hidden = !(hand && hf.handedness);
+      if (hf.handedness) els.handChip.textContent = hf.handedness + ' hand';
+      els.builtInName.hidden = !(hand && hf.builtInGesture);
+      if (hf.builtInGesture) els.builtInName.textContent = 'MediaPipe: ' + hf.builtInGesture + ' ' + Math.round(hf.builtInScore * 100) + '%';
       els.holdHint.textContent = st.progress > 0 ? 'Keep holding to send ' + COMMANDS[st.candidate] : ' ';
     },
   };
