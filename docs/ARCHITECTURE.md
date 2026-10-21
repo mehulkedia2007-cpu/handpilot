@@ -3,13 +3,15 @@
 ## Data flow
 
 ```
-Webcam ─► MediaPipe Hands (Phase 1: Gesture Recognizer) ─► 21 landmarks
+Webcam ─► MediaPipe Gesture Recognizer ─► 21 landmarks + world landmarks, handedness, built-in gesture
    │                                                          │
 Simulator sliders ────────────────────────────────────────────┤  same "HandFrame" shape
                                                               ▼
-                               core/hand.js  → finger ratios → bends (0–1), palm x → body yaw
+                               core/hand.js  → finger ratios → bends (0–1), palm x/y/z, pinch
                                                               ▼
-                               core/gestures.js → gesture name (FIST, OPEN, PEACE, THUMBS_UP, POINT, NONE)
+                               core/filters.js → One Euro filter on every bend, palm x/y/z and pinch
+                                                              ▼
+                               core/gestures.js → pickGesture: confident built-in label, else rules on the bends
                                                               ▼
                                core/agent.js  SEE → DECIDE (mode) → ACT (target pose via poseFor)
                                                               ▼
@@ -19,7 +21,6 @@ Simulator sliders ────────────────────�
 ```
 
 Later phases add these pieces:
-- `core/filters.js` (One Euro smoothing, Phase 1)
 - `core/ik.js` and `scene/arm.js` (Phase 2)
 - `core/stacking.js` (Phase 3)
 - `core/knn.js` and `core/motion.js` (Phase 4)
@@ -29,15 +30,20 @@ Later phases add these pieces:
 
 The loop runs once per animation frame, about 60 times a second:
 
-1. **Read input.** `cam.read(now)` or `sim.read(now)` returns a `HandFrame`.
-2. **Classify.** `classify(frame.bends)` returns a gesture name.
-3. **Agent step.** `agent.step(now, { hand, gesture })` returns `{ mode, progress, candidate }`.
-4. **Pose.** `poseFor(mode, t, bends, yaw)` returns target joint angles, or `null` in HOLD.
-5. **Ease.** `blendPose(cur, target, alpha)` moves the current angles part of the way to the target.
-6. **Render.** The robot copies `cur` onto its joints, and Three.js draws the frame.
-7. **UI.** Every ~70 ms the HUD and panels refresh. The DOM is slower than WebGL, so this doesn't run every frame.
+1. **Read input.** `cam.read()` or `sim.read(now)` returns a `HandFrame`.
+2. **Filter.** `handFilter.filter(frame)` smooths it with One Euro filters. The camera frame's `t` is the time of its recognition, so a repeated frame is recognised and not filtered twice.
+3. **Classify.** `pickGesture(frame)` returns a gesture name.
+4. **Agent step.** `agent.step(now, { hand, gesture })` returns `{ mode, progress, candidate }`.
+5. **Pose.** `poseFor(mode, t, bends, yaw)` returns target joint angles, or `null` in HOLD.
+6. **Ease.** `blendPose(cur, target, 0.35)` moves the current angles part of the way to the target. The filter already removed jitter, so this only softens jumps between modes.
+7. **Render.** The robot copies `cur` onto its joints, and Three.js draws the frame.
+8. **UI.** Every ~70 ms the HUD and panels refresh, and once a second the FPS readout. The DOM is slower than WebGL, so this doesn't run every frame.
 
-The camera runs its own loop (`input/camera.js`). It sends one video frame at a time to MediaPipe and stores the latest result, and `read()` returns whatever is newest. This means slow hand tracking never slows down rendering.
+The camera runs its own loop (`input/camera.js`). It calls `recognizeForVideo` only when `video.currentTime` has changed, so the model never runs twice on the same frame, and stores the latest result; `read()` returns whatever is newest. Recognition is synchronous, so it does share the main thread with rendering; the performance HUD shows its cost in ms. Moving it to a Web Worker is the optional P1.5.
+
+## Saved settings
+
+`core/settings.js` loads and saves one JSON object under `handpilot.settings.v1`: calibration, filter settings, selected robot and gesture mappings. `main.js` passes in `localStorage` (or `null` if even touching it throws). Every field is validated on load, so a corrupt or old value falls back to its default without losing the others.
 
 ## Module rules
 
@@ -59,7 +65,7 @@ These are defined in [src/core/types.md](../src/core/types.md).
 
 - No bundler. `index.html` has an **import map** that maps `three` and `@mediapipe/tasks-vision` to exact, pinned versions on jsDelivr.
 - `main.js` loads the 3D modules with a dynamic `import()`. If the Three.js CDN is unreachable, the simulator, agent and panels still work, and the stage shows a clear message.
-- In Phase 0 the camera uses the legacy `@mediapipe/hands` script, the same as the prototype. Phase 1 replaces it with the Gesture Recognizer from `@mediapipe/tasks-vision`.
+- The camera loads `@mediapipe/tasks-vision` with a dynamic `import()` on the first **Start camera** click, then its WASM files from the same pinned version and the `gesture_recognizer.task` model from Google's storage bucket. The recognizer is created with the GPU delegate and retried on the CPU if that fails, and is kept for later restarts.
 
 ## Three.js r128 → r160
 

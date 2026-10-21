@@ -10,6 +10,7 @@ All notable changes to HandPilot are listed here, newest first.
 - P1.3: Settings (calibration, filter tuning, selected robot, gesture mappings) saved to `localStorage` under one versioned key, `handpilot.settings.v1`, through `src/core/settings.js`. Storage is passed in, every access is wrapped in try/catch, and each field is validated on load so one bad value never wipes the rest. A calibration saved by the Phase 0 app is migrated on first run. Added a **Reset to defaults** button. The robot and gesture-mapping fields are stored now and become editable in Phases 2 and 4.
 - P1.4: Performance HUD on the stage: render FPS, tracking FPS and average milliseconds per recognition call, refreshed once a second by a small `PerfMeter` (`src/core/perf.js`).
 - P1.5 (optional, Web Worker recognition) was skipped.
+- Docs: README, `docs/ARCHITECTURE.md`, `docs/TESTING.md` and `docs/LEARNING.md` (Phase 1) updated.
 
 ### Phase 0: Set up the project
 - P0.1: Repository skeleton, `package.json` with `dev` and `test` scripts, MIT licence, `.gitignore`.

@@ -9,7 +9,9 @@
 
 ## Features
 
-- **Webcam hand tracking.** MediaPipe finds 21 points on your hand; HandPilot turns them into five finger-bend numbers (0% straight to 100% curled).
+- **Webcam hand tracking.** The MediaPipe Gesture Recognizer finds 21 points on your hand, tells left from right, and names the gesture. HandPilot turns the points into five finger-bend numbers (0% straight to 100% curled). It runs on the GPU and falls back to the CPU.
+- **Jitter filtering.** A One Euro filter smooths every bend and the palm position: steady when your hand is still, quick when it moves. Two sliders (Min cutoff, Beta) tune it live.
+- **Performance HUD.** Render FPS, tracking FPS and milliseconds per recognition, updated once a second.
 - **A 3D robot that mirrors your fingers.** Index and ring raise the shoulders, middle and pinky bend the elbows, the thumb nods the head, and moving your hand left or right turns the body.
 - **Gesture commands handled by an agent.** Each frame the agent goes through SEE, DECIDE and ACT. Holding a gesture for about a second sends a command:
 
@@ -22,8 +24,10 @@
   | No hand for 3 s | IDLE | Neutral pose, resumes when your hand returns |
 
 - **Works without a camera.** A slider simulator with presets drives the same pipeline, so you can try every gesture without a webcam.
-- **Calibration.** "Set open hand" and "Set fist" fit the bend scale to your hand, and the calibration is saved in your browser.
+- **Calibration and saved settings.** "Set open hand" and "Set fist" fit the bend scale to your hand. Calibration and filter settings are saved in your browser, with a Reset to defaults button.
 - **Live agent log** showing every decision and why it was made.
+
+MediaPipe's built-in gestures drive the commands when it is confident; otherwise the rule-based classifier on the bends decides (and always does for the simulator).
 
 Coming next (see [the build plan](#roadmap)): robot-arm teleoperation with inverse kinematics, pick-and-place, in-browser gesture learning (KNN), and an LLM agent with tool calling.
 
@@ -48,16 +52,17 @@ Your browser opens **http://localhost:5173**. Click **Start camera** and allow a
 npm test
 ```
 
-This runs Node's built-in test runner on `tests/`. The tests cover the pure logic in `src/core/` (finger maths, gesture rules, the agent state machine and robot poses), need no browser or network, and finish in under a second.
+This runs Node's built-in test runner on `tests/`. The tests cover the pure logic in `src/core/` (finger maths, gesture rules, the agent state machine, robot poses, the One Euro filter, saved settings and the FPS meter), need no browser or network, and finish in under a second.
 
 ## How it works
 
 ```
-Webcam ─► MediaPipe Hands ─► 21 landmarks ─┐
-Simulator sliders ─────────────────────────┤  same HandFrame shape
+Webcam ─► MediaPipe Gesture Recognizer ─► 21 landmarks, handedness, built-in gesture ─┐
+Simulator sliders ─────────────────────────────────────────────────────────────────────┤  same HandFrame shape
                                            ▼
-                 core/hand.js     finger ratios ─► bends (0–1)
-                 core/gestures.js bends ─► gesture name
+                 core/hand.js     finger ratios ─► bends (0–1), palm, pinch
+                 core/filters.js  One Euro filter removes jitter
+                 core/gestures.js built-in label, or rules on the bends ─► gesture name
                  core/agent.js    SEE ─► DECIDE (mode) ─► ACT (target pose)
                                            ▼
                  scene/*          Three.js renders the robot
@@ -73,7 +78,7 @@ More detail is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Plain-language e
 
 ## Privacy
 
-**Video never leaves your browser.** Every frame is processed on your own machine inside the browser tab. Nothing is uploaded, recorded or stored. The only network requests download libraries (Three.js, MediaPipe) and fonts from public CDNs. Calibration is saved in your browser's `localStorage`.
+**Video never leaves your browser.** Every frame is processed on your own machine inside the browser tab. Nothing is uploaded, recorded or stored. The only network requests download libraries (Three.js, MediaPipe) and fonts from public CDNs. Calibration and filter settings are saved in your browser's `localStorage` (key `handpilot.settings.v1`) and never sent anywhere.
 
 ## Deploy
 
@@ -103,7 +108,7 @@ reference/          the original single-file prototype
 | Phase | Milestone |
 |---|---|
 | 0 ✅ | Project set up: modules, tests, docs, deploy |
-| 1 | MediaPipe Gesture Recognizer, One Euro filter, saved settings, FPS HUD |
+| 1 ✅ | MediaPipe Gesture Recognizer, One Euro filter, saved settings, FPS HUD |
 | 2 | Robot arm teleoperation with inverse kinematics and pinch-to-grab |
 | 3 | Pick-and-place block-stacking challenge |
 | 4 | Record/replay motions and train custom gestures in the browser (KNN) |

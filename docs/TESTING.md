@@ -16,9 +16,17 @@ Run `npm test` first; it must pass. Then go through this list in Chrome at the e
 - [ ] The hold ring fills up while a command is being held.
 - [ ] The agent log shows a SEE / DECIDE / ACT line for each change.
 - [ ] Every button and slider can be reached and used with Tab, Enter and the arrow keys.
+- [ ] The top-right HUD shows **Render NN fps**, updating about once a second.
+- [ ] Moving **Min cutoff** down and **Beta** up changes how fast the robot follows a preset change.
+- [ ] Change the filter sliders, reload: the values are kept. **Reset to defaults** puts them back to 1.0 / 1.0, and they stay after a reload.
+- [ ] In a private window the app still works (settings may or may not persist, but nothing breaks).
 
 ## Camera (Chrome, Edge, Safari)
-- [ ] **Start camera** asks for permission, then shows the preview with the hand skeleton.
+- [ ] **Start camera** asks for permission, then shows the preview with the hand skeleton. The note says whether the model runs on the GPU or CPU.
+- [ ] The stage shows a **Left hand** / **Right hand** chip that matches the hand you actually raised.
+- [ ] Under the gesture name, **MediaPipe: …** shows the built-in label and its confidence (e.g. `Victory 92%`).
+- [ ] The HUD also shows **Tracking NN fps · N ms**.
+- [ ] Holding your hand still, the robot doesn't shake; moving fast, it doesn't trail far behind.
 - [ ] The finger channels follow your real fingers.
 - [ ] Every gesture above works with a real hand.
 - [ ] **Set open hand** and **Set fist** calibrate, and the calibration still works after a reload.
@@ -26,6 +34,8 @@ Run `npm test` first; it must pass. Then go through this list in Chrome at the e
 - [ ] **Stop camera** gives control back to the simulator.
 - [ ] Bad light, a partly visible hand, two hands in view: the app doesn't crash.
 - [ ] Camera blocked (deny permission): a clear message appears and the simulator still works.
+- [ ] Camera busy (open it in another app first): the "in use by another app" message appears.
+- [ ] Model fails to load (DevTools → Network → Offline, then Start camera): the "hand model could not load" message appears, and Start camera works again once back online.
 
 ## Deployed site
 - [ ] The live GitHub Pages link loads over HTTPS.
