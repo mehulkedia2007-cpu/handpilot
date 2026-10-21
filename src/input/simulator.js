@@ -1,6 +1,7 @@
 // Slider + preset input. Produces the same HandFrame shape as the camera,
 // so the rest of the app never needs to know where the hand came from.
-import { FINGERS, palmXFromYaw } from '../core/hand.js';
+import { FINGERS, palmXFromYaw, lerp } from '../core/hand.js';
+import { DEPTH_RANGE } from '../core/workspace.js';
 
 const NAMES = { thumb: 'Thumb', index: 'Index', middle: 'Middle', ring: 'Ring', pinky: 'Pinky' };
 const PRESETS = [
@@ -11,6 +12,7 @@ const PRESETS = [
 export function createSimulator(slidersEl, presetsEl) {
   const bends = { thumb: 0.5, index: 0.8, middle: 0.8, ring: 0.8, pinky: 0.8 };
   let yaw = 0;
+  let height = 0.5, reach = 0.5;   // 0–1, only used by the arm
   let locked = false;   // true while the camera is in control
   const sliders = {}, outs = {};
 
@@ -31,6 +33,17 @@ export function createSimulator(slidersEl, presetsEl) {
   const yawIn = yawRow.querySelector('input'), yawOut = yawRow.querySelector('output');
   yawIn.addEventListener('input', () => { yaw = yawIn.value / 100 * 0.8; yawOut.textContent = yawIn.value; });
 
+  // Height and Reach stand in for moving your hand up/down and toward/away from the camera.
+  function addSlider(id, label, value, onInput) {
+    const row = document.createElement('div'); row.className = 'srow';
+    row.innerHTML = `<label for="s_${id}">${label}</label><input id="s_${id}" type="range" min="0" max="100" value="${value}"><output>${value}</output>`;
+    slidersEl.appendChild(row);
+    const input = row.querySelector('input'), out = row.querySelector('output');
+    input.addEventListener('input', () => { out.textContent = input.value; onInput(input.value / 100); });
+  }
+  addSlider('height', 'Height', 50, (v) => { height = v; });
+  addSlider('reach', 'Reach', 50, (v) => { reach = v; });
+
   for (const [label, values] of PRESETS) {
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'btn'; b.textContent = label;
@@ -47,7 +60,9 @@ export function createSimulator(slidersEl, presetsEl) {
       return {
         present: true, landmarks: null, world: null, handedness: null,
         bends: { ...bends },
-        palm: { x: palmXFromYaw(yaw), y: 0.5, z: 0 },
+        // y: image y grows downward, so a higher hand has a smaller y.
+        // z: reaching out means a smaller (farther) palm in the image.
+        palm: { x: palmXFromYaw(yaw), y: 1 - height, z: lerp(DEPTH_RANGE[1], DEPTH_RANGE[0], reach) },
         pinch: null, builtInGesture: null, builtInScore: 0, t: now,
       };
     },

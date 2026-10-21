@@ -5,6 +5,7 @@
 // Every link points along its Group's local +z, which makes yaw = 0 face the viewer.
 import * as THREE from 'three';
 import { ARM } from '../core/armSpec.js';
+import { WORKSPACE } from '../core/workspace.js';
 
 export function buildArm(scene) {
   const mBody = new THREE.MeshStandardMaterial({ color: 0x8f7cf6, metalness: 0.3, roughness: 0.5 });
@@ -40,6 +41,18 @@ export function buildArm(scene) {
     wrist.add(f); return f;
   });
 
+  // The workspace box, drawn faintly, and a small sphere at the target the hand is pointing at.
+  // They hang off root (not base), so they stay put while the arm turns.
+  const ws = WORKSPACE, size = (r) => r[1] - r[0], mid = (r) => (r[0] + r[1]) / 2;
+  const box3 = new THREE.LineSegments(
+    new THREE.EdgesGeometry(new THREE.BoxGeometry(size(ws.x), size(ws.y), size(ws.z))),
+    new THREE.LineBasicMaterial({ color: 0x8996a8, transparent: true, opacity: 0.25 }),
+  );
+  box3.position.set(mid(ws.x), mid(ws.y), mid(ws.z)); root.add(box3);
+  const mTarget = new THREE.MeshBasicMaterial({ color: 0x4cc38a, transparent: true, opacity: 0.85 });
+  const target = new THREE.Mesh(new THREE.SphereGeometry(0.08, 16, 12), mTarget);
+  target.visible = false; root.add(target);
+
   scene.add(root);
 
   // Copy arm angles (see core/armSpec.js for what each one means) onto the model.
@@ -55,5 +68,13 @@ export function buildArm(scene) {
 
   function setVisible(on) { root.visible = on; }
 
-  return { apply, setVisible };
+  // pos is {x,y,z} or null to hide it. Green when the arm can reach it, red when not.
+  function showTarget(pos, reachable = true) {
+    target.visible = !!pos;
+    if (!pos) return;
+    target.position.set(pos.x, pos.y, pos.z);
+    mTarget.color.setHex(reachable ? 0x4cc38a : 0xef6a6a);
+  }
+
+  return { apply, setVisible, showTarget };
 }

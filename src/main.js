@@ -7,6 +7,7 @@ import { createHandFilter } from './core/filters.js';
 import { PerfMeter } from './core/perf.js';
 import { loadSettings, saveSettings, defaultSettings, ROBOTS } from './core/settings.js';
 import { ARM_LIMITS, defaultArmPose, clampArmPose } from './core/armSpec.js';
+import { targetFromPalm } from './core/workspace.js';
 import { createSimulator } from './input/simulator.js';
 import { createCamera, CAMERA_BLOCKED_MSG } from './input/camera.js';
 import { createHud } from './ui/hud.js';
@@ -175,7 +176,10 @@ function frame() {
   const st = agent.step(now, { hand, gesture: g });
   const target = poseFor(st.mode, t, b, yawFromPalmX(hf.palm.x));
   if (target) applyPose(target, POSE_ALPHA);
-  if (arm && settings.robot === 'arm') arm.apply(armPose);
+  if (arm && settings.robot === 'arm') {
+    arm.apply(armPose);
+    arm.showTarget(hand ? targetFromPalm(hf.palm) : null);
+  }
   if (stage) stage.render();
   cam.perf.update(now);
   if (renderPerf.update(now)) hud.perf(renderPerf, source === 'cam' ? cam.perf : null);
