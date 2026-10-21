@@ -13,6 +13,7 @@ export const ARM = {
   shoulderHeight: 1.1,   // floor to shoulder axis
   L1: 1.6,               // shoulder axis to elbow axis
   L2: 1.4,               // elbow axis to wrist axis
+  tool: 0.5,             // wrist axis to the middle of the gripper fingers (the point that grabs)
 };
 
 export const ARM_JOINTS = ['yaw', 'shoulder', 'elbow', 'wrist', 'grip'];
@@ -23,7 +24,7 @@ export const ARM_LIMITS = {
   yaw: [-2.6, 2.6],
   shoulder: [-0.2, 2.9],
   elbow: [0, 2.7],
-  wrist: [-2.2, 2.2],
+  wrist: [-2.8, 2.8],
   grip: [0, 1],
 };
 

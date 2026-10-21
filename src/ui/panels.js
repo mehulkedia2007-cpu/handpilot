@@ -131,6 +131,8 @@ export function createJointPanel(el, limits, pose, onChange) {
       outs[j].textContent = inputs[j].value + (j === 'grip' ? '%' : '°');
     }
   }
+  // Disabled sliders still move, so they double as a live read-out of the IK angles.
+  function setEnabled(on) { for (const j of Object.keys(inputs)) inputs[j].disabled = !on; }
   show(pose);
-  return { show };
+  return { show, setEnabled };
 }

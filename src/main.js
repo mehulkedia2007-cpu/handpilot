@@ -8,6 +8,7 @@ import { PerfMeter } from './core/perf.js';
 import { loadSettings, saveSettings, defaultSettings, ROBOTS } from './core/settings.js';
 import { ARM_LIMITS, defaultArmPose, clampArmPose } from './core/armSpec.js';
 import { targetFromPalm } from './core/workspace.js';
+import { solveIK } from './core/ik.js';
 import { createSimulator } from './input/simulator.js';
 import { createCamera, CAMERA_BLOCKED_MSG } from './input/camera.js';
 import { createHud } from './ui/hud.js';
@@ -143,15 +144,27 @@ function applyPose(target, alpha) {
 
 /* ---------- robot choice + arm joints ---------- */
 // Both robots stay in the scene and only one is visible, so switching is instant.
-// For now the arm is driven by the debug sliders; IK takes over in P2.3.
-let armPose = defaultArmPose();
-const joints = createJointPanel($('jointSliders'), ARM_LIMITS, armPose, (p) => { armPose = clampArmPose(p); });
-$('btnPark').addEventListener('click', () => { armPose = defaultArmPose(); joints.show(armPose); });
+// The hand normally drives the arm through IK. Ticking "Drive joints with the sliders"
+// hands the joints to the debug sliders instead, which is handy for checking the model.
+const armCur = defaultArmPose();       // what the model shows, eased toward a goal each frame
+let armSliderPose = defaultArmPose();  // the debug sliders' pose
+let jointDebug = false;
+const joints = createJointPanel($('jointSliders'), ARM_LIMITS, armSliderPose, (p) => { armSliderPose = clampArmPose(p); });
+$('jointDebug').addEventListener('change', () => {
+  jointDebug = $('jointDebug').checked;
+  armSliderPose = { ...armCur };
+  joints.setEnabled(jointDebug);
+  $('btnPark').disabled = !jointDebug;
+});
+joints.setEnabled(false);
+$('btnPark').disabled = true;
+$('btnPark').addEventListener('click', () => { armSliderPose = defaultArmPose(); joints.show(armSliderPose); });
 
 function showRobot() {
   const isArm = settings.robot === 'arm';
   if (robot) robot.setVisible(!isArm);
   if (arm) arm.setVisible(isArm);
+  if (stage) stage.setView(isArm ? 0.7 : 0.45, isArm ? 1.12 : 1.28);
   $('armJoints').hidden = !isArm;
   robotSwitch.show(settings.robot);
 }
@@ -177,8 +190,13 @@ function frame() {
   const target = poseFor(st.mode, t, b, yawFromPalmX(hf.palm.x));
   if (target) applyPose(target, POSE_ALPHA);
   if (arm && settings.robot === 'arm') {
-    arm.apply(armPose);
-    arm.showTarget(hand ? targetFromPalm(hf.palm) : null);
+    const goal = hand && !jointDebug ? targetFromPalm(hf.palm) : null;
+    let want = null, reachable = true;
+    if (jointDebug) want = armSliderPose;
+    else if (goal) { const ik = solveIK(goal); reachable = ik.reachable; want = { ...ik, grip: armCur.grip }; }
+    if (want) blendPose(armCur, clampArmPose(want), POSE_ALPHA);
+    arm.apply(armCur);
+    arm.showTarget(goal, reachable);
   }
   if (stage) stage.render();
   cam.perf.update(now);
@@ -190,6 +208,7 @@ function frame() {
     channels.update(b);
     if (source === 'cam') sim.display(b);
     panel.update(st.mode, g, hand);
+    if (settings.robot === 'arm' && !jointDebug) joints.show(armCur);
   }
 }
 applyPose(poseFor('MANUAL', 0, sim.read(0).bends, 0), 1);

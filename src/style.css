@@ -107,6 +107,8 @@ input[type=range]{width:100%;accent-color:var(--accent);margin:0}
 .srow{display:grid;grid-template-columns:70px minmax(0,1fr) 32px;align-items:center;gap:10px;font-size:13px}
 .srow output{font:500 12px/1 var(--font-mono);text-align:right;font-variant-numeric:tabular-nums}
 .srow.joint{grid-template-columns:70px minmax(0,1fr) 44px}
+.check{display:inline-flex;align-items:center;gap:8px;font-size:13px;min-height:36px;cursor:pointer}
+.check input{accent-color:var(--accent);width:16px;height:16px;margin:0}
 .tune{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
 
 .glist{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 24px;margin:0;padding:0;list-style:none}

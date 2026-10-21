@@ -64,8 +64,11 @@
       <div class="tune" id="armJoints" hidden>
         <div class="ph"><span class="k">Arm joints</span><span class="chip">debug</span></div>
         <div class="sliders" id="jointSliders"></div>
-        <div class="row"><button class="btn" id="btnPark" type="button">Park arm</button></div>
-        <p class="note">Drive each joint of the arm by hand. Hand control of the arm arrives with inverse kinematics.</p>
+        <div class="row">
+          <label class="check"><input type="checkbox" id="jointDebug"> Drive joints with the sliders</label>
+          <button class="btn" id="btnPark" type="button">Park arm</button>
+        </div>
+        <p class="note">Your hand moves the target sphere and inverse kinematics works out the joint angles, shown here. Tick the box to drive each joint yourself instead.</p>
       </div>
       <div class="tune">
         <div class="ph"><span class="k">Jitter filter</span><span class="chip">One Euro</span></div>

@@ -63,7 +63,11 @@ export function createStage(stageEl) {
     renderer.render(scene, camera);
   }
 
-  return { scene, render };
+  // Jump the orbit camera to a new angle (theta spins around, phi tilts). Used when the
+  // robot changes: the arm reaches toward the viewer, so a side-on view shows it best.
+  function setView(theta, phi = orbit.phi) { orbit.theta = theta; orbit.phi = phi; }
+
+  return { scene, render, setView };
 }
 
 // Drag to orbit, scroll to zoom. Returns a live object the render loop reads.

@@ -5,9 +5,9 @@ import { clamp, lerp } from './hand.js';
 
 // World units, same as the 3D scene. The arm stands at the origin facing +z (the viewer).
 export const WORKSPACE = {
-  x: [-1.6, 1.6],   // left .. right on screen
-  y: [0.3, 2.6],    // floor .. above the shoulder
-  z: [0.9, 2.5],    // near the base .. out toward the viewer
+  x: [-1.5, 1.5],   // left .. right on screen
+  y: [0.3, 2.4],    // floor .. above the shoulder
+  z: [1.1, 2.3],    // near the base .. out toward the viewer
 };
 
 // Palm width in the image (HandFrame palm.z) for a hand far from / close to the camera.
