@@ -4,8 +4,111 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>HandPilot</title>
+<meta name="description" content="Control a 3D robot with your hand through a webcam. Video never leaves your browser.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="src/style.css">
+<!-- The import map lets modules write `import 'three'` with no bundler.
+     Versions are pinned exactly so a library update can never break the app. -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "@mediapipe/tasks-vision": "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/vision_bundle.mjs"
+  }
+}
+</script>
+<script type="module" src="src/main.js"></script>
 </head>
 <body>
-<p>HandPilot is being set up.</p>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>HandPilot</h1>
+      <p class="sub">Your fingers drive a robot. A small agent watches, decides and acts, and takes over when you stop.</p>
+    </div>
+    <span class="chip" id="srcChip">Source: simulator</span>
+  </header>
+
+  <main class="grid">
+    <section class="stage" id="stage" aria-label="3D robot">
+      <div class="hud tl">
+        <div class="mode" id="modeBadge" data-mode="MANUAL"><span class="dot"></span><span id="modeName">MANUAL</span></div>
+        <div class="mode-desc" id="modeDesc">Robot mirrors your fingers</div>
+      </div>
+      <div class="hud tr hint">Drag to orbit. Scroll to zoom.</div>
+      <div class="hud bl" id="gestureBox" data-mode="MANUAL">
+        <svg class="ring" viewBox="0 0 44 44" aria-hidden="true"><circle class="ring-bg" cx="22" cy="22" r="18"/><circle class="ring-fg" id="ringFg" cx="22" cy="22" r="18"/></svg>
+        <div>
+          <div class="k">Gesture</div>
+          <div class="gname" id="gestureName">none</div>
+          <div class="hint" id="holdHint">&nbsp;</div>
+        </div>
+      </div>
+      <div class="stage-msg" id="stageMsg" hidden></div>
+    </section>
+
+    <section class="panel sim" id="simPanel" aria-label="Simulator">
+      <div class="ph"><span class="k">Simulator</span><span class="chip">0 = straight, 100 = curled</span></div>
+      <div class="presets" id="presets"></div>
+      <div class="sliders" id="sliders"></div>
+      <div class="tune">
+        <div class="srow"><label for="smooth">Smoothing</label><input id="smooth" type="range" min="0" max="90" value="45"><output id="smoothOut">45</output></div>
+        <p class="note">Hold a preset for about a second and the agent treats it as a command. Higher smoothing makes the robot move more slowly and steadily.</p>
+      </div>
+    </section>
+
+    <div class="rail">
+      <section class="panel" aria-label="Camera">
+        <div class="ph"><span class="k">Camera</span><span class="chip" id="camState">Off</span></div>
+        <div class="preview">
+          <div class="mirror"><video id="video" playsinline muted></video><canvas id="ovl"></canvas></div>
+          <div class="preview-empty" id="previewEmpty">Camera is off</div>
+        </div>
+        <div class="row">
+          <button class="btn primary" id="btnCam" type="button">Start camera</button>
+          <button class="btn" id="btnStop" type="button" hidden>Stop camera</button>
+        </div>
+        <div class="row" id="calRow" hidden>
+          <button class="btn" id="btnOpen" type="button">Set open hand</button>
+          <button class="btn" id="btnFist" type="button">Set fist</button>
+          <button class="btn" id="btnResetCal" type="button">Reset</button>
+        </div>
+        <p class="note" id="camNote">Video is processed inside this browser tab and is never uploaded. Use a well lit room and keep your hand in view.</p>
+      </section>
+
+      <section class="panel" aria-label="Finger channels">
+        <div class="ph"><span class="k">Finger channels</span><span class="chip">bend %</span></div>
+        <div id="channels"></div>
+        <p class="note">Right and left are as you see them on screen. Hand position turns the robot.</p>
+      </section>
+
+      <section class="panel" aria-label="Agent">
+        <div class="ph"><span class="k">Agent</span><span class="chip" id="agentMode">MANUAL</span></div>
+        <div class="pipe">
+          <div><span class="tag SEE">SEE</span><span id="pSee">simulator input</span></div>
+          <div><span class="tag DECIDE">DECIDE</span><span id="pDecide">mode MANUAL</span></div>
+          <div><span class="tag ACT">ACT</span><span id="pAct">copy finger bends to joints</span></div>
+        </div>
+        <ol class="log" id="log" aria-label="Agent decisions"></ol>
+      </section>
+    </div>
+
+    <section class="panel gest" aria-label="Gesture commands">
+      <div class="ph"><span class="k">Gesture commands</span><span class="chip">hold about 1 s</span></div>
+      <ul class="glist" id="glist"></ul>
+      <p class="note">Commands only fire when a gesture is held, so normal finger movement never triggers one. With no hand in view for 3 seconds the agent switches to IDLE and resumes when your hand returns.</p>
+    </section>
+  </main>
+
+  <section class="pipeline" aria-label="How it works">
+    <div class="step"><b>Webcam</b><span>Video frames from your camera.</span></div>
+    <div class="step"><b>Hand landmarks</b><span>MediaPipe finds 21 points on your hand.</span></div>
+    <div class="step"><b>Finger bend</b><span>Distances between points become five numbers, 0 to 100%.</span></div>
+    <div class="step"><b>Agent</b><span>Sees the hand, decides a mode, acts on the robot.</span></div>
+    <div class="step"><b>Robot joints</b><span>Three.js rotates shoulders, elbows, head and body.</span></div>
+  </section>
+</div>
 </body>
 </html>
