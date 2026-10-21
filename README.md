@@ -2,7 +2,7 @@
 
 **Real-time hand-gesture control of a 3D robot in the browser. An agent watches your hand, decides which mode the robot should be in, and acts.**
 
-**Live demo:** https://mehulkedia2007-cpu.github.io/handpilot/ *(live once the repo is pushed and GitHub Pages is switched on; see [Deploy](#deploy))*
+**Live demo:** https://mehulkedia2007-cpu.github.io/handpilot/
 
 <!-- Demo GIF goes here in Phase 3: ![HandPilot demo](docs/media/demo.gif) -->
 > *Demo GIF coming in Phase 3.*
