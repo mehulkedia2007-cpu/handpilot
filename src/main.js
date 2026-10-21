@@ -4,6 +4,7 @@ import { yawFromPalmX } from './core/hand.js';
 import { pickGesture } from './core/gestures.js';
 import { Agent, poseFor, blendPose } from './core/agent.js';
 import { createHandFilter } from './core/filters.js';
+import { loadSettings, saveSettings, defaultSettings } from './core/settings.js';
 import { createSimulator } from './input/simulator.js';
 import { createCamera, CAMERA_BLOCKED_MSG } from './input/camera.js';
 import { createHud } from './ui/hud.js';
@@ -11,6 +12,14 @@ import { createChannels, createAgentPanel, buildGestureGuide } from './ui/panels
 
 const $ = (id) => document.getElementById(id);
 const t0 = performance.now();
+
+/* ---------- saved settings ---------- */
+// Even reading window.localStorage can throw (blocked cookies, sandboxed iframes),
+// so it is fetched inside try/catch. With null, settings just live in memory.
+function getStorage() { try { return window.localStorage; } catch (_) { return null; } }
+const storage = getStorage();
+let settings = loadSettings(storage);
+const persist = () => saveSettings(storage, settings);
 
 /* ---------- UI + agent ---------- */
 const panel = createAgentPanel({ agentMode: $('agentMode'), pSee: $('pSee'), pDecide: $('pDecide'), pAct: $('pAct'), log: $('log') }, t0);
@@ -31,19 +40,32 @@ buildGestureGuide($('glist'));
 // The One Euro filter does the real smoothing, so the pose only needs a light
 // ease, mainly to soften jumps when the mode changes.
 const POSE_ALPHA = 0.35;
-const handFilter = createHandFilter({ minCutoff: 1.0, beta: 1.0 });
-function bindFilterSlider(name) {
-  const input = $(name), out = $(name + 'Out');
-  const apply = () => { out.textContent = Number(input.value).toFixed(1); handFilter.setParams({ [name]: Number(input.value) }); };
-  input.addEventListener('input', apply);
-  apply();
+const handFilter = createHandFilter(settings.filter);
+const FILTER_KEYS = ['minCutoff', 'beta'];
+function showFilter() {
+  for (const k of FILTER_KEYS) { $(k).value = settings.filter[k]; $(k + 'Out').textContent = settings.filter[k].toFixed(1); }
+  handFilter.setParams(settings.filter);
 }
-bindFilterSlider('minCutoff');
-bindFilterSlider('beta');
+for (const k of FILTER_KEYS) {
+  $(k).addEventListener('input', () => { settings.filter[k] = Number($(k).value); showFilter(); });
+  $(k).addEventListener('change', persist);   // 'change' fires once on release, not on every pixel of a drag
+}
+showFilter();
 
 /* ---------- inputs ---------- */
 const sim = createSimulator($('sliders'), $('presets'));
-const cam = createCamera($('video'), $('ovl'));
+const cam = createCamera($('video'), $('ovl'), {
+  initialCal: settings.calibration,
+  onCalChange: (cal) => { settings.calibration = cal; persist(); },
+});
+
+$('btnDefaults').addEventListener('click', () => {
+  settings = defaultSettings();
+  persist();
+  showFilter();
+  cam.setCal(settings.calibration);
+  panel.add('ACT', 'settings reset to defaults');
+});
 let source = 'sim';
 
 function setCam(state, note, cls) {

@@ -7,7 +7,6 @@ import { FINGERS, lerp, fingerRatios, bendsFromRatios, palmFromLandmarks, pinchF
 const VISION_VERSION = '0.10.35';
 const WASM_URL = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${VISION_VERSION}/wasm`;
 const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/1/gesture_recognizer.task';
-const CAL_KEY = 'gesture-robot-cal';
 // Pairs of landmark indexes to draw as bones on the preview.
 const LINKS = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
 const TIPS = [4, 8, 12, 16, 20];
@@ -55,20 +54,13 @@ function loadRecognizer() {
   return recognizerPromise;
 }
 
-function loadCal() {
-  try {
-    const p = JSON.parse(localStorage.getItem(CAL_KEY));
-    if (p && p.open && p.closed) return p;
-  } catch (_) { /* storage blocked or bad JSON: use defaults */ }
-  return copyCal(DEFAULT_CAL);
-}
-function saveCal(cal) { try { localStorage.setItem(CAL_KEY, JSON.stringify(cal)); } catch (_) { /* private mode */ } }
-
-export function createCamera(video, overlay) {
+// initialCal comes from the saved settings; onCalChange(cal) is called whenever
+// the user calibrates, so main.js can save it.
+export function createCamera(video, overlay, { initialCal = DEFAULT_CAL, onCalChange = () => {} } = {}) {
   const octx = overlay.getContext('2d');
   let stream = null, recognizer = null, delegate = null, running = false;
   let lastVideoTime = -1;
-  let cal = loadCal();
+  let cal = copyCal(initialCal);
   let calRatios = null;   // lightly averaged raw ratios, used only when calibrating
   let frame = emptyFrame(0);
 
@@ -174,14 +166,15 @@ export function createCamera(video, overlay) {
     const next = copyCal(cal);
     for (const n of FINGERS) next[which][n] = calRatios[n];
     if (!isUsableCal(next)) return 'That reading is too close to the other pose. Open your hand fully or make a tight fist, then try again.';
-    cal = next; saveCal(cal);
+    cal = next; onCalChange(copyCal(cal));
     return (which === 'open' ? 'Open hand' : 'Fist') + ' saved. Straight fingers now read 0%, curled fingers 100%.';
   }
 
-  function resetCal() { cal = copyCal(DEFAULT_CAL); saveCal(cal); return 'Calibration reset to defaults.'; }
+  function resetCal() { setCal(DEFAULT_CAL); onCalChange(copyCal(cal)); return 'Calibration reset to defaults.'; }
+  function setCal(next) { cal = copyCal(next); }
 
   return {
-    start, stop, calibrate, resetCal,
+    start, stop, calibrate, resetCal, setCal,
     get running() { return running; },
     get delegate() { return delegate; },
     // t is the time of the last recognition, not the time of this read, so the
