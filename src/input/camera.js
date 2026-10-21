@@ -1,6 +1,7 @@
 // Webcam + MediaPipe Gesture Recognizer (@mediapipe/tasks-vision).
 // Turns video frames into HandFrames: 21 landmarks, world landmarks in metres,
 // which hand it is, and MediaPipe's own guess at the gesture.
+import { PerfMeter } from '../core/perf.js';
 import { FINGERS, lerp, fingerRatios, bendsFromRatios, palmFromLandmarks, pinchFromLandmarks, DEFAULT_CAL, copyCal, isUsableCal } from '../core/hand.js';
 
 // The WASM files must come from the same version as the JS in the import map (index.html).
@@ -60,6 +61,7 @@ export function createCamera(video, overlay, { initialCal = DEFAULT_CAL, onCalCh
   const octx = overlay.getContext('2d');
   let stream = null, recognizer = null, delegate = null, running = false;
   let lastVideoTime = -1;
+  const perf = new PerfMeter();   // recognitions per second and ms per call
   let cal = copyCal(initialCal);
   let calRatios = null;   // lightly averaged raw ratios, used only when calibrating
   let frame = emptyFrame(0);
@@ -117,7 +119,9 @@ export function createCamera(video, overlay, { initialCal = DEFAULT_CAL, onCalCh
       const ts = performance.now();
       try {
         // Timestamps must always increase; performance.now() guarantees that.
-        onResults(recognizer.recognizeForVideo(video, ts), ts);
+        const res = recognizer.recognizeForVideo(video, ts);
+        perf.tick(performance.now() - ts);   // time the model only, not our drawing
+        onResults(res, ts);
       } catch (err) { console.warn('recognition failed for one frame', err); }
     }
     requestAnimationFrame(loop);
@@ -177,6 +181,7 @@ export function createCamera(video, overlay, { initialCal = DEFAULT_CAL, onCalCh
     start, stop, calibrate, resetCal, setCal,
     get running() { return running; },
     get delegate() { return delegate; },
+    perf,
     // t is the time of the last recognition, not the time of this read, so the
     // filter downstream can tell a new camera frame from a repeat of the old one.
     read() {

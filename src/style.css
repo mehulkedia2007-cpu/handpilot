@@ -42,7 +42,8 @@ h1{font:700 32px/1 var(--font-display);letter-spacing:.05em;text-transform:upper
 .stage canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
 .hud{position:absolute;z-index:2;pointer-events:none}
 .hud.tl{top:12px;left:12px;display:flex;flex-direction:column;gap:6px;max-width:70%}
-.hud.tr{top:12px;right:12px;text-align:right}
+.hud.tr{top:12px;right:12px;text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+.perf{font:500 11px/1.4 var(--font-mono);color:var(--muted);background:var(--scrim);border:1px solid var(--line);border-radius:4px;padding:4px 8px;font-variant-numeric:tabular-nums;white-space:pre}
 .hud.bl{left:12px;bottom:12px;display:flex;gap:10px;align-items:center;background:var(--scrim);border:1px solid var(--line);border-radius:6px;padding:8px 12px 8px 8px}
 .hint{font:400 12px/1.3 var(--font-body);color:var(--muted)}
 .mode{display:inline-flex;align-items:center;gap:8px;align-self:flex-start;background:var(--scrim);border:1px solid var(--mode);color:var(--mode);border-radius:4px;padding:6px 10px;font:700 15px/1 var(--font-display);letter-spacing:.12em}

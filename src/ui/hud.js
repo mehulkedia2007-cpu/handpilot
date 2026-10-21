@@ -15,6 +15,15 @@ const RING_LEN = 113.1;
 
 export function createHud(els) {
   return {
+    // render and track are PerfMeters; track is null while the simulator drives.
+    perf(render, track) {
+      let text = `Render ${Math.round(render.rate)} fps`;
+      if (track) {
+        text += `\nTracking ${Math.round(track.rate)} fps`;
+        if (track.avgMs != null) text += ` · ${track.avgMs.toFixed(1)} ms`;
+      }
+      els.perf.textContent = text;
+    },
     // hf is the current HandFrame; handedness and the built-in label only exist for the camera.
     update(st, gesture, hf) {
       const hand = hf.present;

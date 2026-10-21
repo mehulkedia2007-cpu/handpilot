@@ -4,6 +4,7 @@ import { yawFromPalmX } from './core/hand.js';
 import { pickGesture } from './core/gestures.js';
 import { Agent, poseFor, blendPose } from './core/agent.js';
 import { createHandFilter } from './core/filters.js';
+import { PerfMeter } from './core/perf.js';
 import { loadSettings, saveSettings, defaultSettings } from './core/settings.js';
 import { createSimulator } from './input/simulator.js';
 import { createCamera, CAMERA_BLOCKED_MSG } from './input/camera.js';
@@ -31,7 +32,7 @@ panel.add('ACT', 'copy finger bends to joints');
 const hud = createHud({
   modeBadge: $('modeBadge'), gestureBox: $('gestureBox'), modeName: $('modeName'), modeDesc: $('modeDesc'),
   gestureName: $('gestureName'), ringFg: $('ringFg'), holdHint: $('holdHint'),
-  handChip: $('handChip'), builtInName: $('builtInName'),
+  handChip: $('handChip'), builtInName: $('builtInName'), perf: $('perf'),
 });
 const channels = createChannels($('channels'));
 buildGestureGuide($('glist'));
@@ -136,9 +137,11 @@ function applyPose(target, alpha) {
 
 /* ---------- main loop ---------- */
 let lastHud = 0;
+const renderPerf = new PerfMeter();
 function frame() {
   requestAnimationFrame(frame);
   const now = performance.now(), t = (now - t0) / 1000;
+  renderPerf.tick();
   const hf = handFilter.filter(source === 'cam' ? cam.read() : sim.read(now));
   const hand = hf.present, b = hf.bends;
   const g = pickGesture(hf);
@@ -146,6 +149,8 @@ function frame() {
   const target = poseFor(st.mode, t, b, yawFromPalmX(hf.palm.x));
   if (target) applyPose(target, POSE_ALPHA);
   if (stage) stage.render();
+  cam.perf.update(now);
+  if (renderPerf.update(now)) hud.perf(renderPerf, source === 'cam' ? cam.perf : null);
   // The DOM is slow compared with WebGL, so the panels refresh about 14 times a second, not every frame.
   if (now - lastHud > 70) {
     lastHud = now;
