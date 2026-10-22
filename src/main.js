@@ -11,7 +11,8 @@ import { targetFromPalm } from './core/workspace.js';
 import { armGoalFor, ARM_MODE_DESC, ARM_ACT_TEXT } from './core/armMotion.js';
 import { createPinchLatch } from './core/pinch.js';
 import { forwardKinematics } from './core/ik.js';
-import { createStacker, BLOCK_SIZE } from './core/stacking.js';
+import { createStacker, isOneStack, BLOCK_SIZE } from './core/stacking.js';
+import { createChallenge, formatTime, loadBest, saveBest, isNewBest } from './core/challenge.js';
 import { createSimulator } from './input/simulator.js';
 import { createCamera, CAMERA_BLOCKED_MSG } from './input/camera.js';
 import { createHud } from './ui/hud.js';
@@ -175,6 +176,46 @@ joints.setEnabled(false);
 $('btnPark').disabled = true;
 $('btnPark').addEventListener('click', () => { armSliderPose = defaultArmPose(); joints.show(armSliderPose); });
 
+/* ---------- stacking challenge ---------- */
+const challenge = createChallenge();
+let best = loadBest(storage);
+const CH_STATE = { ready: 'Ready', running: 'Running', won: 'Stacked' };
+function showChallenge(now) {
+  const time = formatTime(challenge.elapsed(now));
+  $('chTime').textContent = time;
+  $('chState').textContent = CH_STATE[challenge.state];
+  $('chState').className = 'chip' + (challenge.state === 'won' ? ' on' : '');
+  $('chBest').textContent = best === null ? '--' : formatTime(best);
+  $('btnChStart').textContent = challenge.state === 'ready' ? 'Start' : challenge.state === 'running' ? 'Restart' : 'Play again';
+  // The stage timer only shows during and right after a run, so it doesn't clutter free play.
+  const hud = $('chHud');
+  hud.hidden = challenge.state === 'ready' || settings.robot !== 'arm';
+  hud.textContent = challenge.state === 'won' ? 'Stacked in ' + time : time;
+  hud.classList.toggle('won', challenge.state === 'won');
+}
+$('btnChStart').addEventListener('click', () => {
+  // Every run starts from the same three blocks in a row, with nothing held.
+  stacker.release(); stacker.reset();
+  challenge.start(performance.now());
+  $('chNote').textContent = 'Go! Stack all three blocks into one tower.';
+  panel.add('ACT', 'challenge started, blocks reset');
+  showChallenge(performance.now());
+});
+$('btnChReset').addEventListener('click', () => {
+  stacker.release(); stacker.reset(); challenge.reset();
+  $('chNote').textContent = 'Blocks reset. Press Start to time a run, or just play.';
+  panel.add('ACT', 'blocks reset');
+  showChallenge(performance.now());
+});
+function checkWin(now) {
+  if (!challenge.update(now, !stacker.held && isOneStack(stacker.blocks))) return;
+  const ms = challenge.time, record = isNewBest(ms, best);
+  if (record) { best = ms; saveBest(storage, ms); }
+  $('chNote').textContent = `Tower built in ${formatTime(ms)}.` + (record ? ' New best time!' : ` Best is ${formatTime(best)}.`);
+  panel.add('ACT', `tower complete in ${formatTime(ms)}` + (record ? ', new best' : ''));
+  showChallenge(now);
+}
+
 function showRobot() {
   const isArm = settings.robot === 'arm';
   if (robot) robot.setVisible(!isArm);
@@ -183,6 +224,9 @@ function showRobot() {
   if (!isArm) { const ev = stacker.release(); if (ev) logBlock(ev); }
   if (stage) stage.setView(isArm ? 0.7 : 0.45, isArm ? 1.12 : 1.28, isArm ? { x: 0, y: 1.1, z: 0.9 } : { x: 0, y: 1.9, z: 0 });
   $('armJoints').hidden = !isArm;
+  $('challengePanel').hidden = !isArm;
+  if (!isArm && challenge.state === 'running') challenge.reset();   // a run only counts with the arm on screen
+  showChallenge(performance.now());
   // Describe modes and actions in terms of the robot on screen.
   agent.actText = isArm ? ARM_ACT_TEXT : null;
   hud.setDescriptions(isArm ? ARM_MODE_DESC : null);
@@ -237,6 +281,7 @@ function frame() {
       const ev = stacker.step(armCur.grip, tip, armCur.yaw);
       if (ev) logBlock(ev);
       blocksView.show(stacker.blocks, { held: stacker.held, hover: stacker.hover(tip), dt });
+      checkWin(now);
     }
     arm.apply(armCur, stacker.held ? BLOCK_SIZE : 0);
   }
@@ -251,6 +296,7 @@ function frame() {
     if (source === 'cam') sim.display(b);
     panel.update(st.mode, g, hand);
     if (settings.robot === 'arm' && !jointDebug) joints.show(armCur);
+    if (challenge.state === 'running') showChallenge(now);
   }
 }
 applyPose(poseFor('MANUAL', 0, sim.read(0).bends, 0), 1);

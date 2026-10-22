@@ -44,6 +44,7 @@
       <div class="hud tr">
         <div class="hint">Drag to orbit. Scroll to zoom.</div>
         <div class="perf" id="perf" aria-label="Performance">Render -- fps</div>
+        <div class="timer" id="chHud" hidden></div>
       </div>
       <div class="hud bl" id="gestureBox" data-mode="MANUAL">
         <svg class="ring" viewBox="0 0 44 44" aria-hidden="true"><circle class="ring-bg" cx="22" cy="22" r="18"/><circle class="ring-fg" id="ringFg" cx="22" cy="22" r="18"/></svg>
@@ -83,6 +84,18 @@
     </section>
 
     <div class="rail">
+      <section class="panel" id="challengePanel" aria-label="Stacking challenge" hidden>
+        <div class="ph"><span class="k">Stacking challenge</span><span class="chip" id="chState">Ready</span></div>
+        <div class="ch-time">
+          <span class="ch-clock" id="chTime" role="timer" aria-live="off">0:00.0</span>
+          <span class="hint">Best <b id="chBest">--</b></span>
+        </div>
+        <div class="row">
+          <button class="btn primary" id="btnChStart" type="button">Start</button>
+          <button class="btn" id="btnChReset" type="button">Reset blocks</button>
+        </div>
+        <p class="note" id="chNote" aria-live="polite">Stack all three blocks into one tower. Move the gripper over a block until it glows, pinch to grab, open your fingers to drop. The clock stops when the tower stands.</p>
+      </section>
       <section class="panel" aria-label="Camera">
         <div class="ph"><span class="k">Camera</span><span class="chip" id="camState">Off</span></div>
         <div class="preview">

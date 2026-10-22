@@ -55,6 +55,8 @@ h1{font:700 32px/1 var(--font-display);letter-spacing:.05em;text-transform:upper
 .perf{font:500 11px/1.4 var(--font-mono);color:var(--muted);background:var(--scrim);border:1px solid var(--line);border-radius:4px;padding:4px 8px;font-variant-numeric:tabular-nums;white-space:pre}
 .hud.bl{left:12px;bottom:12px;display:flex;gap:10px;align-items:center;background:var(--scrim);border:1px solid var(--line);border-radius:6px;padding:8px 12px 8px 8px}
 .hint{font:400 12px/1.3 var(--font-body);color:var(--muted)}
+.timer{font:700 20px/1 var(--font-display);letter-spacing:.06em;font-variant-numeric:tabular-nums;color:var(--fg);background:var(--scrim);border:1px solid var(--line);border-radius:4px;padding:6px 10px}
+.timer.won{color:var(--good);border-color:var(--good)}
 .mode{display:inline-flex;align-items:center;gap:8px;align-self:flex-start;background:var(--scrim);border:1px solid var(--mode);color:var(--mode);border-radius:4px;padding:6px 10px;font:700 15px/1 var(--font-display);letter-spacing:.12em}
 .mode .dot{width:8px;height:8px;border-radius:50%;background:var(--mode)}
 .mode-desc{font:400 13px/1.3 var(--font-body);color:var(--fg);background:var(--scrim);padding:4px 8px;border-radius:4px;align-self:flex-start}
@@ -94,6 +96,9 @@ input[type=range]{width:100%;accent-color:var(--accent);margin:0}
 .ch .val{font:500 12px/1 var(--font-mono);text-align:right;font-variant-numeric:tabular-nums}
 .ch .to{grid-column:2 / 4;font-size:12px;color:var(--muted);margin-top:-2px}
 
+.ch-time{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.ch-clock{font:700 34px/1 var(--font-display);letter-spacing:.04em;font-variant-numeric:tabular-nums}
+.ch-time b{font:500 13px/1 var(--font-mono);color:var(--fg)}
 .pipe{display:grid;gap:6px;margin-bottom:12px}
 .pipe div{display:grid;grid-template-columns:56px minmax(0,1fr);gap:8px;font-size:13px;align-items:baseline}
 .tag{font:600 10px/1 var(--font-mono);letter-spacing:.08em;padding:3px 5px;border-radius:2px;text-align:center;border:1px solid var(--line);color:var(--muted)}
