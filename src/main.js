@@ -10,6 +10,8 @@ import { ARM_LIMITS, defaultArmPose, clampArmPose } from './core/armSpec.js';
 import { targetFromPalm } from './core/workspace.js';
 import { armGoalFor, ARM_MODE_DESC, ARM_ACT_TEXT } from './core/armMotion.js';
 import { createPinchLatch } from './core/pinch.js';
+import { forwardKinematics } from './core/ik.js';
+import { createStacker, BLOCK_SIZE } from './core/stacking.js';
 import { createSimulator } from './input/simulator.js';
 import { createCamera, CAMERA_BLOCKED_MSG } from './input/camera.js';
 import { createHud } from './ui/hud.js';
@@ -122,14 +124,15 @@ try {
 /* ---------- 3D scene ---------- */
 // Loaded dynamically so that if the Three.js CDN fails, the rest of the app
 // (simulator, agent, panels) still works and we can show a clear message.
-let stage = null, robot = null, arm = null;
+let stage = null, robot = null, arm = null, blocksView = null;
 try {
-  const [{ createStage }, { buildHumanoid }, { buildArm }] = await Promise.all([
-    import('./scene/stage.js'), import('./scene/humanoid.js'), import('./scene/arm.js'),
+  const [{ createStage }, { buildHumanoid }, { buildArm }, { buildBlocks }] = await Promise.all([
+    import('./scene/stage.js'), import('./scene/humanoid.js'), import('./scene/arm.js'), import('./scene/blocks.js'),
   ]);
   stage = createStage($('stage'));
   robot = buildHumanoid(stage.scene);
   arm = buildArm(stage.scene);
+  blocksView = buildBlocks(stage.scene);
 } catch (err) {
   console.warn(err);
   const m = $('stageMsg');
@@ -151,6 +154,13 @@ const armCur = defaultArmPose();       // what the model shows, eased toward a g
 let armSliderPose = defaultArmPose();  // the debug sliders' pose
 let jointDebug = false;
 const pinch = createPinchLatch();
+// The blocks follow the arm's eased grip, not the pinch directly, so they also
+// work with the debug sliders and in the AUTO demo.
+const stacker = createStacker();
+function logBlock(ev) {
+  if (ev.type === 'grab') panel.add('ACT', `grab the ${ev.id} block`);
+  else if (ev.type === 'drop') panel.add('ACT', `drop the ${ev.id} block on the ${ev.on}`);
+}
 const joints = createJointPanel($('jointSliders'), ARM_LIMITS, armSliderPose, (p) => { armSliderPose = clampArmPose(p); });
 $('jointDebug').addEventListener('change', () => {
   jointDebug = $('jointDebug').checked;
@@ -166,7 +176,9 @@ function showRobot() {
   const isArm = settings.robot === 'arm';
   if (robot) robot.setVisible(!isArm);
   if (arm) arm.setVisible(isArm);
-  if (stage) stage.setView(isArm ? 0.7 : 0.45, isArm ? 1.12 : 1.28);
+  if (blocksView) blocksView.setVisible(isArm);
+  if (!isArm) { const ev = stacker.release(); if (ev) logBlock(ev); }
+  if (stage) stage.setView(isArm ? 0.7 : 0.45, isArm ? 1.12 : 1.28, isArm ? { x: 0, y: 1.1, z: 0.9 } : { x: 0, y: 1.9, z: 0 });
   $('armJoints').hidden = !isArm;
   // Describe modes and actions in terms of the robot on screen.
   agent.actText = isArm ? ARM_ACT_TEXT : null;
@@ -184,11 +196,13 @@ const robotSwitch = createRobotSwitch($('robotSwitch'), ROBOTS, settings.robot, 
 showRobot();
 
 /* ---------- main loop ---------- */
-let lastHud = 0;
+let lastHud = 0, lastFrame = performance.now();
 const renderPerf = new PerfMeter();
 function frame() {
   requestAnimationFrame(frame);
   const now = performance.now(), t = (now - t0) / 1000;
+  const dt = (now - lastFrame) / 1000;
+  lastFrame = now;
   renderPerf.tick();
   const hf = handFilter.filter(source === 'cam' ? cam.read() : sim.read(now));
   const hand = hf.present, b = hf.bends;
@@ -215,7 +229,13 @@ function frame() {
       if (goal) blendPose(armCur, goal.pose, POSE_ALPHA);
       arm.showTarget(goal && goal.target, goal ? goal.reachable : true);
     }
-    arm.apply(armCur);
+    if (blocksView) {
+      const tip = forwardKinematics(armCur);   // where the gripper really is, not where it's aiming
+      const ev = stacker.step(armCur.grip, tip, armCur.yaw);
+      if (ev) logBlock(ev);
+      blocksView.show(stacker.blocks, { held: stacker.held, hover: stacker.hover(tip), dt });
+    }
+    arm.apply(armCur, stacker.held ? BLOCK_SIZE : 0);
   }
   if (stage) stage.render();
   cam.perf.update(now);

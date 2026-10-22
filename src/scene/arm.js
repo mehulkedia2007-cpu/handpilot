@@ -57,12 +57,15 @@ export function buildArm(scene) {
 
   // Copy arm angles (see core/armSpec.js for what each one means) onto the model.
   // Rotating +z by a positive angle around x tips it down, so "up" angles are negated.
-  function apply(p) {
+  // holdWidth: width of a block between the fingers, or 0. The fingers stop at its
+  // sides instead of closing through it.
+  function apply(p, holdWidth = 0) {
     base.rotation.y = p.yaw;
     shoulder.rotation.x = -p.shoulder;
     elbow.rotation.x = p.elbow;      // positive folds the forearm down, away from the upper arm's line
     wrist.rotation.x = -p.wrist;
-    const gap = 0.24 - p.grip * 0.19; // fingers slide toward each other as grip goes 0 -> 1
+    // Fingers slide toward each other as grip goes 0 -> 1. 0.035 is half a finger's thickness.
+    const gap = Math.max(0.24 - p.grip * 0.19, holdWidth ? holdWidth / 2 + 0.035 : 0);
     for (const f of fingers) f.position.x = f.userData.side * gap;
   }
 

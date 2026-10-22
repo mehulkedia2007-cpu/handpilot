@@ -6,9 +6,12 @@ import { solveIK } from './ik.js';
 
 // The AUTO demo: pick a block up on the left and put it down on the right, then go home.
 // Each key is a time (s), a gripper point and a grip. Between keys the arm glides.
+// The points line up with the challenge's starting blocks (core/stacking.js): it closes
+// just under the top of the left block, and lets go one block higher on the right, so
+// it really does stack the left block on the right one.
 const HOME = { x: 0, y: 1.6, z: 1.6 };
-const A_UP = { x: -1, y: 1.3, z: 1.6 }, A_DOWN = { x: -1, y: 0.45, z: 1.6 };
-const B_UP = { x: 1, y: 1.3, z: 1.6 }, B_DOWN = { x: 1, y: 0.45, z: 1.6 };
+const A_UP = { x: -1, y: 1.3, z: 1.6 }, A_DOWN = { x: -1, y: 0.55, z: 1.6 };
+const B_UP = { x: 1, y: 1.3, z: 1.6 }, B_DOWN = { x: 1, y: 0.9, z: 1.6 };
 export const AUTO_PATH = [
   { t: 0.0, p: HOME, grip: 0 },
   { t: 1.2, p: A_UP, grip: 0 },

@@ -63,9 +63,13 @@ export function createStage(stageEl) {
     renderer.render(scene, camera);
   }
 
-  // Jump the orbit camera to a new angle (theta spins around, phi tilts). Used when the
-  // robot changes: the arm reaches toward the viewer, so a side-on view shows it best.
-  function setView(theta, phi = orbit.phi) { orbit.theta = theta; orbit.phi = phi; }
+  // Jump the orbit camera to a new angle (theta spins around, phi tilts) and, optionally,
+  // a new point to look at. Used when the robot changes: the arm reaches toward the
+  // viewer over its table, so a lower, three-quarter view centred in front of it shows it best.
+  function setView(theta, phi = orbit.phi, look = null) {
+    orbit.theta = theta; orbit.phi = phi;
+    if (look) target.set(look.x, look.y, look.z);
+  }
 
   return { scene, render, setView };
 }
