@@ -47,6 +47,13 @@ export function isUsableCal(cal, minGap = 0.25) {
   return FINGERS.every((n) => cal.open[n] - cal.closed[n] > minGap);
 }
 
+// Hand sensitivity: stretch a 0–1 image coordinate around the centre of the image,
+// then clamp. Your hand leaves the frame before the palm point reaches the image edge,
+// so a gain above 1 lets a comfortable movement cover the whole range, like mouse sensitivity.
+export function stretch(v, gain = 1) {
+  return clamp(0.5 + (v - 0.5) * (Number.isFinite(gain) ? gain : 1), 0, 1);
+}
+
 // Horizontal palm position (0 = left of image, 1 = right) to body turn in radians.
 // The centre of the image means facing forward.
 export function yawFromPalmX(x) { return (0.5 - x) * 1.6; }

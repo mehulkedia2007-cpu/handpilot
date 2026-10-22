@@ -28,6 +28,7 @@
   | Thumbs up | GREET | Waves for 3 s |
   | No hand for 3 s | IDLE | Neutral pose, resumes when your hand returns |
 
+- **Hand sensitivity.** One slider stretches your hand movement around the middle of the camera picture, so a comfortable movement turns the humanoid fully or reaches the sides of the arm's table.
 - **Works without a camera.** A slider simulator with presets drives the same pipeline, so you can try every gesture without a webcam.
 - **Calibration and saved settings.** "Set open hand" and "Set fist" fit the bend scale to your hand. Calibration and filter settings are saved in your browser, with a Reset to defaults button.
 - **Live agent log** showing every decision and why it was made.

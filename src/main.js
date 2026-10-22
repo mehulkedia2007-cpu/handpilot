@@ -1,6 +1,6 @@
 // Wires everything together and runs the main loop:
 // input (simulator or camera) -> gesture -> agent -> pose -> 3D robot + UI.
-import { yawFromPalmX } from './core/hand.js';
+import { yawFromPalmX, stretch } from './core/hand.js';
 import { pickGesture } from './core/gestures.js';
 import { Agent, poseFor, blendPose } from './core/agent.js';
 import { createHandFilter } from './core/filters.js';
@@ -46,8 +46,10 @@ buildGestureGuide($('glist'));
 
 /* ---------- jitter filter ---------- */
 // The One Euro filter does the real smoothing, so the pose only needs a light
-// ease, mainly to soften jumps when the mode changes.
-const POSE_ALPHA = 0.35;
+// ease, mainly to soften jumps when the mode changes. Once the humanoid has been
+// in MANUAL for a moment it follows the hand closely (FOLLOW_ALPHA), so it can
+// keep up when you dance with it; the gentler POSE_ALPHA is for mode changes.
+const POSE_ALPHA = 0.35, FOLLOW_ALPHA = 0.7, MODE_EASE_MS = 600;
 const handFilter = createHandFilter(settings.filter);
 const FILTER_KEYS = ['minCutoff', 'beta'];
 function showFilter() {
@@ -60,9 +62,9 @@ for (const k of FILTER_KEYS) {
 }
 showFilter();
 
-function showGain() { $('armGain').value = settings.armGain; $('armGainOut').textContent = settings.armGain.toFixed(1); }
-$('armGain').addEventListener('input', () => { settings.armGain = Number($('armGain').value); showGain(); });
-$('armGain').addEventListener('change', persist);
+function showGain() { $('handGain').value = settings.handGain; $('handGainOut').textContent = settings.handGain.toFixed(1); }
+$('handGain').addEventListener('input', () => { settings.handGain = Number($('handGain').value); showGain(); });
+$('handGain').addEventListener('change', persist);
 showGain();
 
 /* ---------- inputs ---------- */
@@ -261,8 +263,11 @@ function frame() {
   const hand = hf.present, b = hf.bends;
   const g = pickGesture(hf);
   const st = agent.step(now, { hand, gesture: g });
-  const target = poseFor(st.mode, t, b, yawFromPalmX(hf.palm.x));
-  if (target) applyPose(target, POSE_ALPHA);
+  // Sensitivity only applies to the camera: the simulator's sliders already span the whole range.
+  const gain = source === 'cam' ? settings.handGain : 1;
+  const target = poseFor(st.mode, t, b, yawFromPalmX(stretch(hf.palm.x, gain)));
+  const following = st.mode === 'MANUAL' && now - agent.modeSince > MODE_EASE_MS;
+  if (target) applyPose(target, following ? FOLLOW_ALPHA : POSE_ALPHA);
   if (arm && settings.robot === 'arm') {
     if (jointDebug) {
       blendPose(armCur, armSliderPose, POSE_ALPHA);
@@ -275,8 +280,6 @@ function frame() {
         closed = pinch.update(hf.pinch);
         if (closed !== was) panel.add('ACT', closed ? 'pinch seen, close the gripper' : 'pinch released, open the gripper');
       }
-      // Sensitivity only applies to the camera: the simulator's sliders already span the whole box.
-      const gain = source === 'cam' ? settings.armGain : 1;
       const manual = { target: hand ? targetFromPalm(hf.palm, undefined, undefined, gain) : null, closed };
       // Seconds since the mode began, so the AUTO demo always starts from the top.
       const goal = armGoalFor(st.mode, (now - agent.modeSince) / 1000, manual);

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   FINGERS, clamp, lerp, dist, DEFAULT_CAL, copyCal, fingerRatios, bendFromRatio,
-  bendsFromRatios, isUsableCal, yawFromPalmX, palmXFromYaw, palmFromLandmarks, pinchFromLandmarks,
+  bendsFromRatios, isUsableCal, yawFromPalmX, palmXFromYaw, stretch, palmFromLandmarks, pinchFromLandmarks,
 } from '../src/core/hand.js';
 
 // A fake hand: 21 points where we choose the wrist, knuckles and fingertips.
@@ -89,4 +89,15 @@ test('pinch is small when thumb and index tips touch, and does not depend on han
   assert.ok(open > 0.5);
   const small = pinchFromLandmarks(makeHand({ curl: 0, scale: 0.2 }));
   assert.ok(Math.abs(small - open) < 1e-9);
+});
+
+test('stretch spreads movement around the centre and clamps at the edges', () => {
+  assert.equal(stretch(0.5, 2), 0.5);
+  assert.ok(Math.abs(stretch(0.3, 1.5) - 0.2) < 1e-12);
+  assert.equal(stretch(0.1, 2), 0);
+  assert.equal(stretch(0.95, 2), 1);
+  assert.equal(stretch(0.3), 0.3);          // gain 1 changes nothing
+  assert.equal(stretch(0.3, NaN), 0.3);
+  // With the default 1.6, the humanoid reaches its full turn about 19% in from the image edge.
+  assert.ok(Math.abs(yawFromPalmX(stretch(0.1875, 1.6)) - 0.8) < 1e-12);
 });

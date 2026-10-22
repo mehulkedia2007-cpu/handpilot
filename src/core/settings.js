@@ -20,7 +20,7 @@ export function defaultSettings() {
     calibration: copyCal(DEFAULT_CAL),
     filter: { minCutoff: 1.0, beta: 1.0 },
     robot: 'humanoid',
-    armGain: DEFAULT_GAIN,   // hand sensitivity for the arm with the camera (core/workspace.js)
+    handGain: DEFAULT_GAIN,  // hand sensitivity with the camera, for both robots (core/workspace.js)
     gestureMap: { ...COMMANDS },
   };
 }
@@ -43,7 +43,9 @@ export function sanitizeSettings(raw) {
     for (const k of Object.keys(FILTER_LIMITS)) if (inRange(raw.filter[k], FILTER_LIMITS[k])) s.filter[k] = raw.filter[k];
   }
   if (ROBOTS.includes(raw.robot)) s.robot = raw.robot;
-  if (inRange(raw.armGain, GAIN_RANGE)) s.armGain = raw.armGain;
+  // It was called armGain when only the arm used it; keep a value saved under the old name.
+  const gain = raw.handGain !== undefined ? raw.handGain : raw.armGain;
+  if (inRange(gain, GAIN_RANGE)) s.handGain = gain;
   if (raw.gestureMap && typeof raw.gestureMap === 'object') {
     for (const [g, mode] of Object.entries(raw.gestureMap)) {
       if (g in LABEL && g !== 'NONE' && COMMAND_MODES.includes(mode)) s.gestureMap[g] = mode;

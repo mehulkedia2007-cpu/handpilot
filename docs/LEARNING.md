@@ -190,7 +190,9 @@ The first version mapped the whole camera image (0 to 1) onto the workspace box.
 u = clamp(0.5 + (palm − 0.5) × gain, 0, 1)
 ```
 
-With gain 1.6, the middle ~60% of the image covers the whole box, and anything further out just pins the target at the edge. It's the same idea as mouse sensitivity. The simulator uses gain 1, because its sliders already span the full range.
+With gain 1.6, the middle ~60% of the image covers the whole box, and anything further out just pins the target at the edge. It's the same idea as mouse sensitivity. The simulator uses gain 1, because its sliders already span the full range. The humanoid's body turn uses the same `stretch`, so one slider tunes both robots.
+
+The humanoid also felt laggy because two smoothers were stacked: the One Euro filter, and then an ease that moved the pose only 35% of the way to its target each frame. Easing is still useful when the mode changes (a dance stopping shouldn't snap), but once you're in control the filter is enough. So in MANUAL, after a short 0.6 s settling time, the ease goes up to 70%. Each smoother should have one job.
 
 ### 6. A tiny state machine for the game
 The challenge is three states: **ready → running → won**. Start resets the blocks and records the start time. Each frame it checks "one tower, nothing held"; the first time that's true it stores the time and moves to won. Like the agent, it takes `now` as an argument instead of reading the clock, so tests can pretend 12.5 seconds passed. The best time is stored in `localStorage` with the same try/catch and validation as the settings.

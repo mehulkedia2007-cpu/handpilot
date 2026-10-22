@@ -86,6 +86,12 @@ test('the chosen robot is saved and loaded', () => {
 });
 
 test('hand sensitivity is saved, and out-of-range values fall back to the default', () => {
-  assert.equal(sanitizeSettings({ armGain: 2.2 }).armGain, 2.2);
-  for (const bad of [0.2, 9, '2', NaN, null]) assert.equal(sanitizeSettings({ armGain: bad }).armGain, defaultSettings().armGain);
+  assert.equal(sanitizeSettings({ handGain: 2.2 }).handGain, 2.2);
+  for (const bad of [0.2, 9, '2', NaN, null]) assert.equal(sanitizeSettings({ handGain: bad }).handGain, defaultSettings().handGain);
+});
+
+test('a sensitivity saved under its old name (armGain) is kept', () => {
+  assert.equal(sanitizeSettings({ armGain: 2.0 }).handGain, 2.0);
+  assert.equal(sanitizeSettings({ armGain: 2.0, handGain: 1.2 }).handGain, 1.2);
+  assert.equal('armGain' in sanitizeSettings({ armGain: 2.0 }), false);
 });

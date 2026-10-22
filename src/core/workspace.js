@@ -1,7 +1,7 @@
 // Hand position -> a 3D target point for the arm's wrist.
 // The target lives inside a fixed box in front of the arm (the "workspace"),
 // so whatever the hand does, the arm is only ever asked to reach somewhere sensible.
-import { clamp, lerp } from './hand.js';
+import { clamp, lerp, stretch } from './hand.js';
 
 // World units, same as the 3D scene. The arm stands at the origin facing +z (the viewer).
 export const WORKSPACE = {
@@ -14,8 +14,8 @@ export const WORKSPACE = {
 // Bigger means closer. Values outside this range are clamped.
 export const DEPTH_RANGE = [0.07, 0.2];
 
-// Hand sensitivity: how much the hand's movement is stretched around the middle of
-// the camera image. With 1, the palm would have to reach the very edge of the image
+// Hand sensitivity (see stretch in hand.js), shared by the arm's target and the
+// humanoid's turn. With 1, the palm would have to reach the very edge of the image
 // to reach the edge of the box, but your hand leaves the frame well before its middle
 // knuckle gets there. With 1.6, the middle ~60% of the image already covers the box.
 export const GAIN_RANGE = [1, 2.5];
@@ -26,7 +26,7 @@ export const DEFAULT_GAIN = 1.6;
 export function targetFromPalm(palm, ws = WORKSPACE, depth = DEPTH_RANGE, gain = 1) {
   const g = Number.isFinite(gain) ? clamp(gain, GAIN_RANGE[0], GAIN_RANGE[1]) : 1;
   // Stretch around the centre, then clamp, so the target pins at the box edge instead of leaving it.
-  const unit = (v, fallback) => (Number.isFinite(v) ? clamp(0.5 + (v - 0.5) * g, 0, 1) : fallback);
+  const unit = (v, fallback) => (Number.isFinite(v) ? stretch(v, g) : fallback);
   // The camera image is not mirrored, but the preview is. Moving your hand to your
   // right makes palm.x smaller, so use 1 - x to make the target follow on screen.
   const sx = 1 - unit(palm && palm.x, 0.5);

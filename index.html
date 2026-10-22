@@ -62,13 +62,15 @@
       <div class="ph"><span class="k">Simulator</span><span class="chip">0 = straight, 100 = curled</span></div>
       <div class="presets" id="presets"></div>
       <div class="sliders" id="sliders"></div>
-      <div class="tune" id="armJoints" hidden>
+      <div class="tune">
         <div class="ph"><span class="k">Hand sensitivity</span><span class="chip">camera</span></div>
         <div class="sliders">
-          <div class="srow"><label for="armGain">Sensitivity</label><input id="armGain" type="range" min="1" max="2.5" step="0.1" value="1.6"><output id="armGainOut">1.6</output></div>
+          <div class="srow"><label for="handGain">Sensitivity</label><input id="handGain" type="range" min="1" max="2.5" step="0.1" value="1.6"><output id="handGainOut">1.6</output></div>
         </div>
-        <p class="note">How far the arm moves for a hand movement with the camera. Raise it if you can't reach the sides of the table without your hand leaving the picture; lower it for finer control.</p>
-        <div class="ph sub-ph"><span class="k">Arm joints</span><span class="chip">debug</span></div>
+        <p class="note">How far the robot moves when you move your hand sideways (and, for the arm, up, down and toward the camera). Raise it if you can't turn the robot or reach the sides of the table without your hand leaving the picture; lower it for finer control.</p>
+      </div>
+      <div class="tune" id="armJoints" hidden>
+        <div class="ph"><span class="k">Arm joints</span><span class="chip">debug</span></div>
         <div class="sliders" id="jointSliders"></div>
         <div class="row">
           <label class="check"><input type="checkbox" id="jointDebug"> Drive joints with the sliders</label>

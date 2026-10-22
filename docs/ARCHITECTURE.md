@@ -67,7 +67,7 @@ The loop runs once per animation frame, about 60 times a second:
 3. **Classify.** `pickGesture(frame)` returns a gesture name.
 4. **Agent step.** `agent.step(now, { hand, gesture })` returns `{ mode, progress, candidate }`.
 5. **Pose.** `poseFor(mode, t, bends, yaw)` returns target joint angles, or `null` in HOLD.
-6. **Ease.** `blendPose(cur, target, 0.35)` moves the current angles part of the way to the target. The filter already removed jitter, so this only softens jumps between modes.
+6. **Ease.** `blendPose(cur, target, alpha)` moves the current angles part of the way to the target. The filter already removed jitter, so this mainly softens jumps between modes: alpha is 0.35 normally, and 0.7 once the humanoid has been in MANUAL for 0.6 s, so it keeps up with fast finger movement. With the camera, palm x is first stretched by the **Hand sensitivity** gain (`stretch` in `core/hand.js`) before it becomes the body turn.
 7. **Render.** The robot copies `cur` onto its joints, and Three.js draws the frame.
 8. **UI.** Every ~70 ms the HUD and panels refresh, and once a second the FPS readout. The DOM is slower than WebGL, so this doesn't run every frame.
 
