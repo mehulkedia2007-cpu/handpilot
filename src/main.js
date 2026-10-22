@@ -60,6 +60,11 @@ for (const k of FILTER_KEYS) {
 }
 showFilter();
 
+function showGain() { $('armGain').value = settings.armGain; $('armGainOut').textContent = settings.armGain.toFixed(1); }
+$('armGain').addEventListener('input', () => { settings.armGain = Number($('armGain').value); showGain(); });
+$('armGain').addEventListener('change', persist);
+showGain();
+
 /* ---------- inputs ---------- */
 const sim = createSimulator($('sliders'), $('presets'));
 const cam = createCamera($('video'), $('ovl'), {
@@ -71,6 +76,7 @@ $('btnDefaults').addEventListener('click', () => {
   settings = defaultSettings();
   persist();
   showFilter();
+  showGain();
   cam.setCal(settings.calibration);
   showRobot();
   panel.add('ACT', 'settings reset to defaults');
@@ -269,7 +275,9 @@ function frame() {
         closed = pinch.update(hf.pinch);
         if (closed !== was) panel.add('ACT', closed ? 'pinch seen, close the gripper' : 'pinch released, open the gripper');
       }
-      const manual = { target: hand ? targetFromPalm(hf.palm) : null, closed };
+      // Sensitivity only applies to the camera: the simulator's sliders already span the whole box.
+      const gain = source === 'cam' ? settings.armGain : 1;
+      const manual = { target: hand ? targetFromPalm(hf.palm, undefined, undefined, gain) : null, closed };
       // Seconds since the mode began, so the AUTO demo always starts from the top.
       const goal = armGoalFor(st.mode, (now - agent.modeSince) / 1000, manual);
       // The grip eases toward its goal like the joints do, which animates the fingers.

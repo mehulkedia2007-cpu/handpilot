@@ -9,7 +9,7 @@ export const BLOCK_SIZE = 0.3;   // every block is a cube this wide
 
 // A low table in front of the arm. It covers the whole workspace box, so the
 // gripper can always reach down to it.
-export const TABLE = { top: 0.3, x: [-1.8, 1.8], z: [0.95, 2.5] };
+export const TABLE = { top: 0.3, x: [-2.3, 2.3], z: [0.95, 2.5] };
 
 // How close (world units) the gripper point must be to a block's top to grab it.
 export const GRAB_RADIUS = 0.25;

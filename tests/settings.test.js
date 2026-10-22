@@ -84,3 +84,8 @@ test('the chosen robot is saved and loaded', () => {
   saveSettings(store, s);
   assert.equal(loadSettings(store).robot, 'arm');
 });
+
+test('hand sensitivity is saved, and out-of-range values fall back to the default', () => {
+  assert.equal(sanitizeSettings({ armGain: 2.2 }).armGain, 2.2);
+  for (const bad of [0.2, 9, '2', NaN, null]) assert.equal(sanitizeSettings({ armGain: bad }).armGain, defaultSettings().armGain);
+});

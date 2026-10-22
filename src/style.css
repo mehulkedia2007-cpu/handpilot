@@ -118,6 +118,7 @@ input[type=range]{width:100%;accent-color:var(--accent);margin:0}
 .check{display:inline-flex;align-items:center;gap:8px;font-size:13px;min-height:36px;cursor:pointer}
 .check input{accent-color:var(--accent);width:16px;height:16px;margin:0}
 .tune{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+.sub-ph{margin-top:14px}
 
 .glist{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 24px;margin:0;padding:0;list-style:none}
 @media (max-width:640px){.glist{grid-template-columns:minmax(0,1fr)}}

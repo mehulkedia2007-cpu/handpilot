@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { WORKSPACE, DEPTH_RANGE, targetFromPalm } from '../src/core/workspace.js';
+import { WORKSPACE, DEPTH_RANGE, DEFAULT_GAIN, targetFromPalm } from '../src/core/workspace.js';
 
 const near = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, `${a} vs ${b}`);
 const inside = (p) => ['x', 'y', 'z'].every((k) => p[k] >= WORKSPACE[k][0] - 1e-9 && p[k] <= WORKSPACE[k][1] + 1e-9);
@@ -33,5 +33,20 @@ test('small hand movements give small target movements (no jumps)', () => {
     const p = targetFromPalm({ x: i / 100, y: i / 100, z: 0.07 + 0.0013 * i });
     assert.ok(Math.hypot(p.x - prev.x, p.y - prev.y, p.z - prev.z) < 0.1);
     prev = p;
+  }
+});
+
+test('sensitivity stretches hand movement around the centre of the image', () => {
+  const mid = (DEPTH_RANGE[0] + DEPTH_RANGE[1]) / 2;
+  // With the default gain (1.6), a palm about 19% in from the edge of the image already reaches the box edge...
+  near(targetFromPalm({ x: 0.18, y: 0.5, z: mid }, undefined, undefined, DEFAULT_GAIN).x, WORKSPACE.x[1]);
+  near(targetFromPalm({ x: 0.82, y: 0.5, z: mid }, undefined, undefined, DEFAULT_GAIN).x, WORKSPACE.x[0]);
+  near(targetFromPalm({ x: 0.5, y: 0.18, z: mid }, undefined, undefined, DEFAULT_GAIN).y, WORKSPACE.y[1]);
+  // ...while gain 1 only gets 60% of the way there.
+  near(targetFromPalm({ x: 0.2, y: 0.5, z: mid }).x, WORKSPACE.x[1] * 0.6);
+  // The centre stays the centre, and big gains still never leave the box.
+  near(targetFromPalm({ x: 0.5, y: 0.5, z: mid }, undefined, undefined, 2.5).x, 0);
+  for (const g of [1, 1.6, 2.5, 99, NaN]) {
+    for (const palm of [{ x: 0, y: 0, z: 0 }, { x: 1, y: 1, z: 1 }]) assert.ok(inside(targetFromPalm(palm, undefined, undefined, g)));
   }
 });

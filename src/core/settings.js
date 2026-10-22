@@ -6,6 +6,7 @@
 // missing entirely in private windows and embedded views.
 import { DEFAULT_CAL, copyCal, isUsableCal, FINGERS } from './hand.js';
 import { COMMANDS, LABEL } from './gestures.js';
+import { GAIN_RANGE, DEFAULT_GAIN } from './workspace.js';
 
 export const SETTINGS_KEY = 'handpilot.settings.v1';
 const LEGACY_CAL_KEY = 'gesture-robot-cal';   // used by the prototype and Phase 0
@@ -19,6 +20,7 @@ export function defaultSettings() {
     calibration: copyCal(DEFAULT_CAL),
     filter: { minCutoff: 1.0, beta: 1.0 },
     robot: 'humanoid',
+    armGain: DEFAULT_GAIN,   // hand sensitivity for the arm with the camera (core/workspace.js)
     gestureMap: { ...COMMANDS },
   };
 }
@@ -41,6 +43,7 @@ export function sanitizeSettings(raw) {
     for (const k of Object.keys(FILTER_LIMITS)) if (inRange(raw.filter[k], FILTER_LIMITS[k])) s.filter[k] = raw.filter[k];
   }
   if (ROBOTS.includes(raw.robot)) s.robot = raw.robot;
+  if (inRange(raw.armGain, GAIN_RANGE)) s.armGain = raw.armGain;
   if (raw.gestureMap && typeof raw.gestureMap === 'object') {
     for (const [g, mode] of Object.entries(raw.gestureMap)) {
       if (g in LABEL && g !== 'NONE' && COMMAND_MODES.includes(mode)) s.gestureMap[g] = mode;

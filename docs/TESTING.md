@@ -63,6 +63,7 @@ Run `npm test` first; it must pass. Then go through this list in Chrome at the e
 - [x] Arm: pinching thumb and index closes the gripper, opening them releases it, with no flicker at the edge.
 - [x] Arm: removing your hand for 3 s parks the arm.
 - [ ] Challenge: a full tower can be built with a real hand (pinch to grab, open to drop).
+- [ ] Arm: at the default **Hand sensitivity** (1.6), moving your hand left and right without leaving the picture swings the arm to both ends of the table. Raising it makes the arm move further for the same hand movement; the setting survives a reload.
 - [ ] Camera blocked (deny permission): a clear message appears and the simulator still works.
 - [ ] Camera busy (open it in another app first): the "in use by another app" message appears.
 - [ ] Model fails to load (DevTools → Network → Offline, then Start camera): the "hand model could not load" message appears, and Start camera works again once back online.

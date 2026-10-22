@@ -183,7 +183,16 @@ which is 1 when they line up, 0 when they don't touch, and 0.5 when one is shift
 ### 4. Falling, and finding what's beneath
 "Falls straight down" means: look at every other block that overlaps the falling block's footprint and sits lower, take the highest top among them (or the table), and rest there. The logic answers instantly; the scene then animates the fall with simple gravity (`v += g·dt`, `y −= v·dt`) so it doesn't teleport. Keeping the animation in the scene and the answer in the logic means the tests never have to wait for anything to fall.
 
-### 5. A tiny state machine for the game
+### 5. Sensitivity: why the arm barely turned
+The first version mapped the whole camera image (0 to 1) onto the workspace box. But the palm point is the middle knuckle, and your hand leaves the frame long before that knuckle reaches the image edge, so in practice only about 15–85% of the range was usable. The arm only got about two-thirds of the way across. The fix is a **gain** around the image centre:
+
+```
+u = clamp(0.5 + (palm − 0.5) × gain, 0, 1)
+```
+
+With gain 1.6, the middle ~60% of the image covers the whole box, and anything further out just pins the target at the edge. It's the same idea as mouse sensitivity. The simulator uses gain 1, because its sliders already span the full range.
+
+### 6. A tiny state machine for the game
 The challenge is three states: **ready → running → won**. Start resets the blocks and records the start time. Each frame it checks "one tower, nothing held"; the first time that's true it stores the time and moves to won. Like the agent, it takes `now` as an argument instead of reading the clock, so tests can pretend 12.5 seconds passed. The best time is stored in `localStorage` with the same try/catch and validation as the settings.
 
 **Interview line:** *"I turned the arm into a game: you stack blocks with your hand against a timer. The grab, drop and stacking rules are pure functions I unit-test, including an end-to-end test where the arm's automatic routine really stacks one block on another. I used forward kinematics to find where the gripper actually is, and footprint overlap to decide when a block snaps into place."*
