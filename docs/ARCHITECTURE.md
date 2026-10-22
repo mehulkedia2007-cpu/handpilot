@@ -20,9 +20,24 @@ Simulator sliders ────────────────────�
                                scene/humanoid.js rotates the robot's joints; stage.js renders
 ```
 
+With the **arm** selected, step ACT takes a different route (`core/armMotion.js`):
+
+```
+palm x, y, width ─► core/workspace.js targetFromPalm ─► 3D target in the workspace box
+                                                              ▼
+pinch ─► core/pinch.js latch (close < 0.35, open > 0.5) ──► armGoalFor(mode, t, {target, closed})
+                                                              │  MANUAL: core/ik.js solveIK(target) + grip
+                                                              │  AUTO: IK along the looping pick-and-place path
+                                                              │  HOLD: null (keep pose)  IDLE: park  GREET: wave
+                                                              ▼
+                               blendPose eases the arm's angles toward the goal
+                                                              ▼
+                               scene/arm.js rotates base, shoulder, elbow, wrist and slides the gripper fingers
+```
+
+The agent itself doesn't know which robot is on screen. It decides the mode the same way for both; `main.js` only gives it different wording (`agent.actText`) for the log.
+
 Later phases add these pieces:
-- `core/armSpec.js` and `scene/arm.js` (P2.1, done): the arm's sizes and joint limits, and its 3D model
-- `core/ik.js` (Phase 2)
 - `core/stacking.js` (Phase 3)
 - `core/knn.js` and `core/motion.js` (Phase 4)
 - the LLM agent and `server/` (Phase 5)

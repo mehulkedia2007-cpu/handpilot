@@ -24,8 +24,12 @@ Run `npm test` first; it must pass. Then go through this list in Chrome at the e
 ## Robot arm (Phase 2)
 - [ ] The **Humanoid / Arm** switch in the header swaps the robot; the pressed button is highlighted.
 - [ ] With **Arm** selected, the **Arm joints** panel appears; with Humanoid it is hidden.
-- [ ] Each arm slider moves its joint: Base turns, Shoulder lifts, Elbow folds, Wrist tilts, Grip closes the fingers.
-- [ ] **Park arm** returns the arm and its sliders to the folded pose.
+- [ ] The **Turn**, **Height** and **Reach** sliders move the target sphere inside the faint workspace box, and the gripper follows it with the fingers level.
+- [ ] Moving the target into a far corner or right next to the base turns the sphere red; the arm stretches toward it without glitching.
+- [ ] The **Pinch** slider closes the gripper above about 70% and opens it again below about 60%; nothing flickers in between. Each change is logged.
+- [ ] With the arm: **Fist** freezes it, **Open palm** resumes, **Peace sign** runs the pick-and-place demo (closes on the left, opens on the right) and **Thumbs up** waves for 3 s.
+- [ ] The HUD description, the agent panel's ACT line and the finger channel labels talk about the arm when it is selected.
+- [ ] Ticking **Drive joints with the sliders** lets each slider move its joint; **Park arm** returns to the folded pose. Unticking hands control back to the hand.
 - [ ] Select Arm and reload: the arm is still selected. **Reset to defaults** goes back to Humanoid.
 
 ## Camera (Chrome, Edge, Safari)
@@ -40,6 +44,9 @@ Run `npm test` first; it must pass. Then go through this list in Chrome at the e
 - [ ] Removing your hand for 3 s switches to IDLE; showing it again switches back to MANUAL.
 - [ ] **Stop camera** gives control back to the simulator.
 - [ ] Bad light, a partly visible hand, two hands in view: the app doesn't crash.
+- [ ] Arm: moving your hand moves the target sphere smoothly; pushing your hand toward the camera moves it toward the arm's base.
+- [ ] Arm: pinching thumb and index closes the gripper, opening them releases it, with no flicker at the edge.
+- [ ] Arm: removing your hand for 3 s parks the arm.
 - [ ] Camera blocked (deny permission): a clear message appears and the simulator still works.
 - [ ] Camera busy (open it in another app first): the "in use by another app" message appears.
 - [ ] Model fails to load (DevTools → Network → Offline, then Start camera): the "hand model could not load" message appears, and Start camera works again once back online.

@@ -26,11 +26,11 @@
 - **Works without a camera.** A slider simulator with presets drives the same pipeline, so you can try every gesture without a webcam.
 - **Calibration and saved settings.** "Set open hand" and "Set fist" fit the bend scale to your hand. Calibration and filter settings are saved in your browser, with a Reset to defaults button.
 - **Live agent log** showing every decision and why it was made.
-- **A robot arm (Phase 2, in progress).** Switch between Humanoid and Arm in the header. The arm has a turning base, shoulder, elbow and wrist joints and a two-finger gripper; for now a debug panel drives each joint, and hand control with inverse kinematics comes next.
+- **Robot arm teleoperation.** Switch between Humanoid and Arm in the header. Your palm moves a target sphere inside a workspace box (left/right, up/down, and depth from how big your hand looks), and **inverse kinematics** works out the base, shoulder, elbow and wrist angles to put the gripper there, keeping it level. The sphere turns red when the target is out of reach. **Pinch** thumb and index to close the gripper; hysteresis stops it chattering. The same gestures work: fist holds, peace sign runs a pick-and-place demo, thumbs up waves, and with no hand the arm parks itself. A debug panel shows the live joint angles and can drive them by hand.
 
 MediaPipe's built-in gestures drive the commands when it is confident; otherwise the rule-based classifier on the bends decides (and always does for the simulator).
 
-Coming next (see [the build plan](#roadmap)): robot-arm teleoperation with inverse kinematics, pick-and-place, in-browser gesture learning (KNN), and an LLM agent with tool calling.
+Coming next (see [the build plan](#roadmap)): a pick-and-place block-stacking challenge, in-browser gesture learning (KNN), and an LLM agent with tool calling.
 
 ## Run it locally
 
@@ -65,6 +65,7 @@ Simulator sliders ────────────────────�
                  core/filters.js  One Euro filter removes jitter
                  core/gestures.js built-in label, or rules on the bends ─► gesture name
                  core/agent.js    SEE ─► DECIDE (mode) ─► ACT (target pose)
+                 core/workspace.js + core/ik.js + core/pinch.js  (arm) palm ─► 3D target ─► joint angles, pinch ─► grip
                                            ▼
                  scene/*          Three.js renders the robot
 ```
@@ -110,7 +111,7 @@ reference/          the original single-file prototype
 |---|---|
 | 0 ✅ | Project set up: modules, tests, docs, deploy |
 | 1 ✅ | MediaPipe Gesture Recognizer, One Euro filter, saved settings, FPS HUD |
-| 2 | Robot arm teleoperation with inverse kinematics and pinch-to-grab |
+| 2 ✅ | Robot arm teleoperation with inverse kinematics and pinch-to-grab |
 | 3 | Pick-and-place block-stacking challenge |
 | 4 | Record/replay motions and train custom gestures in the browser (KNN) |
 | 5 | LLM agent with tool calling and safety limits |

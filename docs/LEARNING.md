@@ -110,3 +110,48 @@ You can't improve what you don't measure. The HUD shows:
 A `PerfMeter` counts events and, once a second, divides the count by the elapsed time. Updating the text only once a second keeps the numbers readable and avoids touching the DOM every frame. If recognition takes, say, 25 ms, it uses a big part of the 16 ms budget for a 60 fps frame, which is why moving it to a **Web Worker** (a background thread) is the optional next step.
 
 **Interview line:** *"I replaced the hand-tracking model with MediaPipe's Gesture Recognizer, kept a rule-based fallback, and added a One Euro filter that adapts its smoothing to hand speed, so it's steady without lag. I measured render and tracking FPS to check performance."*
+
+## Phase 2: Robot arm teleoperation
+
+### 1. Building an arm from nested joints
+The arm is a chain: base → shoulder → upper arm → elbow → forearm → wrist → gripper. In Three.js each joint is a `Group` placed inside the one before it. Rotating a group carries everything inside it, so turning the base swings the whole arm, and bending the shoulder carries the elbow, wrist and gripper along. This is called a **kinematic chain**, and it's how real robot arms and animated skeletons work.
+
+The arm's sizes and joint limits live in `core/armSpec.js`, not in the 3D code. The model and the maths both read the same numbers, so they can't drift apart.
+
+### 2. From a hand in a picture to a point in 3D
+The camera gives the palm's position in the image (0–1 across and down). We map it into a **workspace box** in front of the arm:
+- **x** from palm x, flipped so the target moves the same way as your hand on the mirrored preview;
+- **y** from palm y, flipped because image y grows downward;
+- **depth** from how wide your palm looks: closer to the camera means a bigger palm. It's a cheap stand-in for real depth that needs no extra sensor.
+
+Clamping to the box means the arm is only ever asked to reach somewhere sensible, whatever your hand does.
+
+### 3. Inverse kinematics (IK)
+**Forward kinematics** is easy: given the joint angles, add up the links with sin and cos to find where the gripper is. **Inverse kinematics** is the opposite and harder question: given where the gripper should be, what angles get it there?
+
+For this arm it splits into two easy steps:
+1. **Turn the base to face the target:** `yaw = atan2(x, z)`. Now the rest of the problem is flat, in the plane the arm is pointing along.
+2. **Solve a triangle.** The upper arm (L1), the forearm (L2) and the straight line from shoulder to wrist (d) make a triangle. The **law of cosines** gives its angles:
+   - elbow: `cos(inside angle) = (L1² + L2² − d²) / (2·L1·L2)`, and the elbow bend is `π − inside angle`;
+   - shoulder: the angle up to the target, `atan2(h, r)`, plus the triangle's angle at the shoulder.
+   
+   There are two answers (elbow up or elbow down); we always pick **elbow up**, like a desk lamp.
+
+Then the wrist is set to `−(shoulder − elbow)`, which cancels the tilt of the forearm and keeps the gripper level.
+
+Three things make it robust:
+- **Reachability.** If `d` is longer than `L1 + L2`, no angles can reach. We clamp `d`, so the arm stretches toward the target, and set `reachable: false`; the sphere turns red. The same happens when a joint hits its limit.
+- **No NaN.** `acos` only accepts −1 to 1, and rounding can push a value to 1.0000000001. We clamp before calling it, and treat missing coordinates as 0.
+- **Testing with FK.** The best test of IK is: solve, then run forward kinematics on the answer and check you land on the target (within 1e-6). The tests do that for a dozen hand-picked targets and 2000 random ones.
+
+### 4. Pinch to grab, and hysteresis
+Pinch is the distance between thumb tip and index tip, divided by palm width so it doesn't depend on hand size. A single threshold ("closed below 0.4") would **flicker**: a value hovering at 0.4 plus a little noise crosses it every frame, and the gripper chatters.
+
+**Hysteresis** uses two thresholds: close below 0.35, open only above 0.5. In between, keep whatever you were doing. Noise smaller than the 0.15 gap can never toggle it. Thermostats and the Schmitt trigger in electronics use the same idea. The tests feed it a noisy signal sitting right at each threshold and check that it switches at most once.
+
+### 5. One agent, two robots
+The agent from Phase 0 still decides the mode (MANUAL, HOLD, AUTO, IDLE, GREET) from gestures, and it doesn't know which robot is on screen. `core/armMotion.js` turns each mode into a goal for the arm: follow the hand, freeze, run a pick-and-place path, park, or wave. The AUTO path is a list of **keyframes** (time, position, grip), and the arm glides between them with **smoothstep** (`3u² − 2u³`), which starts and stops gently instead of jerking at each corner. Every point along the path goes through the same IK as your hand does.
+
+Keeping the decision (agent) separate from the action (pose for each robot) is what made adding a second robot a small change instead of a rewrite.
+
+**Interview line:** *"I added a robot arm you control with your hand. The palm position maps to a 3D target, and I wrote an analytic inverse-kinematics solver (base yaw plus the law of cosines) that I test by checking forward kinematics lands back on the target. Pinch-to-grab uses hysteresis so the gripper doesn't flicker, and the same agent drives both robots."*
