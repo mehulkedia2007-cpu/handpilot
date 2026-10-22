@@ -62,6 +62,15 @@ npm test
 
 This runs Node's built-in test runner on `tests/`. The tests cover the pure logic in `src/core/` (finger maths, gesture rules, the agent state machine, robot poses, the One Euro filter, saved settings, the FPS meter, inverse kinematics, pinch, block stacking and the challenge timer), need no browser or network, and finish in under a second.
 
+### Browser checklist (end to end)
+
+```bash
+npx playwright install chromium   # once, downloads a headless Chromium
+npm run e2e
+```
+
+This opens the app in headless Chromium and works through most of [docs/TESTING.md](docs/TESTING.md) by itself, in about two minutes. It covers every gesture and mode, settings surviving a reload, the arm's IK and pinch, grabbing, stacking and snapping blocks, a full timed challenge with the best time, a fake webcam with no hand (IDLE), blocked storage, phone width, and console errors. It drives the simulator sliders, so it can't judge real hand tracking; those items still need a person and a camera. It needs internet for the Three.js and MediaPipe CDNs.
+
 ## How it works
 
 ```

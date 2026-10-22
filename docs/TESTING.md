@@ -2,7 +2,7 @@
 
 Run `npm test` first; it must pass. Then go through this list in Chrome at the end of each phase. Tick an item only when you have actually tried it.
 
-Phase 3 items were ticked after an automated run in headless Chromium (Playwright, driving the simulator sliders, 57/57 checks) plus the owner's camera tries. MediaPipe prints one harmless `INFO: Created TensorFlow Lite XNNPACK delegate for CPU` line through `console.error` when the camera starts; that is not an app error.
+`npm run e2e` (see the README) runs most of this list automatically in headless Chromium. Phase 3 items were ticked after that run (57/57 checks) plus the owner's camera tries. MediaPipe prints one harmless `INFO: Created TensorFlow Lite XNNPACK delegate for CPU` line through `console.error` when the camera starts; that is not an app error.
 
 ## Simulator only (no camera)
 - [x] The page loads with no errors in the console (DevTools → Console).
