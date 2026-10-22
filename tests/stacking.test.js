@@ -1,12 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  BLOCK_SIZE, TABLE, GRAB_RADIUS, HOLD_TOP, startBlocks, topOf, findGrabbable, holdAt, dropBlock, createStacker,
+  BLOCK_SIZE, TABLE, GRAB_RADIUS, HOLD_TOP, SNAP_OVERLAP, startBlocks, topOf, findGrabbable, holdAt, dropBlock,
+  footprintOverlap, supportFor, isOneStack, createStacker,
 } from '../src/core/stacking.js';
 
 const S = BLOCK_SIZE, REST = TABLE.top + S / 2;
 const byId = (blocks, id) => blocks.find((b) => b.id === id);
 const block = (id, x, y, z) => ({ id, x, y, z, yaw: 0 });
+const near = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, `${a} vs ${b}`);
 
 test('three blocks start resting on the table, apart from each other', () => {
   const bs = startBlocks();
@@ -94,4 +96,104 @@ test('release and reset', () => {
   assert.deepEqual(st.blocks, startBlocks());
   // Still closed after the reset, so nothing is grabbed until the grip opens and closes again.
   assert.equal(st.step(1, topOf(byId(st.blocks, 'blue'))), null);
+});
+
+/* ---------- P3.2: drop and stack ---------- */
+
+test('footprint overlap is 1 when aligned, 0 when apart, and shrinks with the offset', () => {
+  const a = block('a', 0, 0, 0);
+  assert.equal(footprintOverlap(a, block('b', 0, 5, 0)), 1);   // height doesn't matter
+  assert.equal(footprintOverlap(a, block('b', S, 0, 0)), 0);
+  assert.ok(Math.abs(footprintOverlap(a, block('b', S / 2, 0, 0)) - 0.5) < 1e-12);
+  assert.ok(Math.abs(footprintOverlap(a, block('b', S / 2, 0, S / 2)) - 0.25) < 1e-12);
+});
+
+test('dropping on a block lands on top of it and snaps into line', () => {
+  const blue = block('blue', 1, REST, 1.6);
+  const red = block('red', 1.04, 1.4, 1.63);   // a little off: about 77% overlap
+  assert.ok(footprintOverlap(red, blue) > SNAP_OVERLAP);
+  const { blocks, on, snapped } = dropBlock([blue, red], 'red');
+  assert.equal(on, 'blue'); assert.equal(snapped, true);
+  assert.deepEqual(byId(blocks, 'red'), block('red', 1, REST + S, 1.6));
+  assert.ok(isOneStack(blocks));
+});
+
+test('a partial overlap still lands on the block, but is not snapped', () => {
+  const blue = block('blue', 1, REST, 1.6);
+  const red = block('red', 1 + S * 0.6, 1.4, 1.6);   // 40% overlap
+  const { blocks, on, snapped } = dropBlock([blue, red], 'red');
+  assert.equal(on, 'blue'); assert.equal(snapped, false);
+  assert.deepEqual(byId(blocks, 'red'), block('red', 1 + S * 0.6, REST + S, 1.6));
+});
+
+test('a block that only misses lands on the table beside it', () => {
+  const blue = block('blue', 1, REST, 1.6);
+  const { blocks, on } = dropBlock([blue, block('red', 1 + S + 0.01, 1.4, 1.6)], 'red');
+  assert.equal(on, 'table');
+  assert.equal(byId(blocks, 'red').y, REST);
+});
+
+test('it rests on the highest block beneath its footprint', () => {
+  // A two-block tower and a lone block, both partly under the falling one.
+  const bs = [block('a', 0, REST, 1.6), block('b', 0, REST + S, 1.6), block('c', S * 0.9, REST, 1.6), block('d', S * 0.45, 2, 1.6)];
+  const { blocks, on } = dropBlock(bs, 'd');
+  assert.equal(on, 'b');
+  near(byId(blocks, 'd').y, REST + 2 * S);
+  assert.equal(supportFor(bs, block('x', S * 0.9, 2, 1.6)).under.id, 'b');
+});
+
+test('a covered block cannot be grabbed out from under another', () => {
+  const bs = [block('a', 0, REST, 1.6), block('b', 0, REST + S, 1.6)];
+  assert.equal(findGrabbable(bs, topOf(bs[0])), null);   // 'a' is covered, and b's top is out of reach
+  assert.equal(findGrabbable(bs, topOf(bs[1])), 'b');
+  assert.equal(findGrabbable([bs[0]], topOf(bs[0])), 'a');   // with nothing on top it is free again
+});
+
+test('a held block cannot be pushed into the table or another block', () => {
+  const bs = [block('a', 0, REST, 1.6), block('b', 1, REST, 1.6)];
+  assert.equal(byId(holdAt(bs, 'b', { x: 1, y: TABLE.top, z: 1.6 }), 'b').y, REST);
+  assert.equal(byId(holdAt(bs, 'b', { x: 0, y: REST + S * 0.6, z: 1.6 }), 'b').y, REST + S);
+});
+
+test('one stack means every block sits on the one below', () => {
+  const tower = [block('a', 0, REST, 1.6), block('b', 0, REST + S, 1.6), block('c', 0.1, REST + 2 * S, 1.6)];
+  assert.ok(isOneStack(tower));
+  assert.ok(isOneStack([...tower].reverse()));          // order doesn't matter
+  assert.equal(isOneStack(startBlocks()), false);
+  assert.equal(isOneStack([tower[0], tower[1], block('c', 1, REST, 1.6)]), false);   // two plus one
+  assert.equal(isOneStack([tower[0], tower[1], block('c', 0, REST + 2 * S + 0.2, 1.6)]), false);   // still in the air
+});
+
+test('the stacker can build a full tower', () => {
+  const st = createStacker();
+  const [red, green, blue] = st.blocks;
+  const carry = (from, onto) => {
+    st.step(0, topOf(from));
+    assert.equal(st.step(1, topOf(from)).type, 'grab');
+    st.step(1, { x: from.x, y: 1.6, z: from.z });     // lift
+    const above = { x: onto.x, y: onto.y + S + 0.3, z: onto.z };
+    st.step(1, above);
+    return st.step(0, above);
+  };
+  assert.equal(carry(red, blue).on, 'blue');
+  assert.equal(carry(green, byId(st.blocks, 'red')).on, 'red');
+  assert.ok(isOneStack(st.blocks));
+});
+
+test('the AUTO demo really stacks the left block on the right one', async () => {
+  // Run the same steps as the main loop: eased arm pose -> FK gripper point -> stacker.
+  const { armGoalFor, AUTO_PERIOD } = await import('../src/core/armMotion.js');
+  const { blendPose } = await import('../src/core/agent.js');
+  const { forwardKinematics } = await import('../src/core/ik.js');
+  const { defaultArmPose } = await import('../src/core/armSpec.js');
+  const st = createStacker(), cur = defaultArmPose(), events = [];
+  for (let t = 0; t < AUTO_PERIOD; t += 1 / 60) {
+    blendPose(cur, armGoalFor('AUTO', t).pose, 0.35);
+    const ev = st.step(cur.grip, forwardKinematics(cur), cur.yaw);
+    if (ev) events.push(ev);
+  }
+  assert.deepEqual(events.map((e) => e.type + ':' + (e.id || '')), ['grab:red', 'drop:red']);
+  assert.equal(events[1].on, 'blue');
+  assert.equal(events[1].snapped, true);
+  near(byId(st.blocks, 'red').y, REST + S);
 });

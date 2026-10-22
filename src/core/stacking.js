@@ -23,6 +23,10 @@ export const HOLD_TOP = 0.06;
 // can never grab and drop on alternate frames.
 export const GRIP = { close: 0.6, open: 0.4 };
 
+// A dropped block that covers more than this share of the block under it snaps
+// exactly on top of it. Less than that, it stays where it was let go.
+export const SNAP_OVERLAP = 0.6;
+
 export const BLOCK_IDS = ['red', 'green', 'blue'];
 // Where each block starts. The AUTO demo picks up whatever is at x = -1.
 const START = { red: { x: -1, z: 1.6 }, green: { x: 0, z: 1.6 }, blue: { x: 1, z: 1.6 } };
@@ -36,10 +40,38 @@ const onTable = (x, z) => x >= TABLE.x[0] && x <= TABLE.x[1] && z >= TABLE.z[0] 
 // The block's top centre, the point the gripper aims for.
 export const topOf = (b, size = BLOCK_SIZE) => ({ x: b.x, y: b.y + size / 2, z: b.z });
 
-// The nearest block whose top is within `radius` of the gripper point, or null.
+// How much of one block's footprint (seen from above) the other covers, 0 to 1.
+// Blocks at rest are always square to the table, so the footprints are axis-aligned
+// squares and the overlap is just (overlap in x) * (overlap in z) / area.
+export function footprintOverlap(a, b, size = BLOCK_SIZE) {
+  const ox = Math.max(0, size - Math.abs(a.x - b.x));
+  const oz = Math.max(0, size - Math.abs(a.z - b.z));
+  return (ox * oz) / (size * size);
+}
+
+// What block `b` would land on if it fell straight down from where it is:
+// the highest block under its footprint (any overlap counts), else the table,
+// else the floor. Returns { top, under } with `under` the supporting block or null.
+// Blocks whose centre is not below b's centre are ignored: they are beside or above it.
+export function supportFor(blocks, b, size = BLOCK_SIZE) {
+  let top = onTable(b.x, b.z) ? TABLE.top : 0, under = null;
+  for (const o of blocks) {
+    if (o.id === b.id || o.y >= b.y || footprintOverlap(o, b, size) === 0) continue;
+    if (o.y + size / 2 > top) { top = o.y + size / 2; under = o; }
+  }
+  return { top, under };
+}
+
+// A block with another block resting on it can't be pulled out from under it.
+export function isCovered(blocks, b, size = BLOCK_SIZE) {
+  return blocks.some((o) => o.id !== b.id && o.y > b.y && footprintOverlap(o, b, size) > 0);
+}
+
+// The nearest uncovered block whose top is within `radius` of the gripper point, or null.
 export function findGrabbable(blocks, gripper, { radius = GRAB_RADIUS, size = BLOCK_SIZE } = {}) {
   let best = null, bestD = radius;
   for (const b of blocks) {
+    if (isCovered(blocks, b, size)) continue;
     const t = topOf(b, size);
     const d = Math.hypot(t.x - gripper.x, t.y - gripper.y, t.z - gripper.z);
     if (d <= bestD) { best = b.id; bestD = d; }
@@ -48,21 +80,41 @@ export function findGrabbable(blocks, gripper, { radius = GRAB_RADIUS, size = BL
 }
 
 // Move block `id` with the gripper: centred under the fingers and turned with the base.
+// Pushing it down into the table or onto another block can't sink it in: it stops
+// on whatever is under it, as if resting there while still held.
 export function holdAt(blocks, id, gripper, yaw = 0, size = BLOCK_SIZE) {
-  return blocks.map((b) => (b.id !== id ? b : {
-    ...b, x: gripper.x, y: gripper.y + HOLD_TOP - size / 2, z: gripper.z, yaw,
-  }));
+  return blocks.map((b) => {
+    if (b.id !== id) return b;
+    const moved = { ...b, x: gripper.x, y: gripper.y + HOLD_TOP - size / 2, z: gripper.z, yaw };
+    moved.y = Math.max(moved.y, supportFor(blocks, moved, size).top + size / 2);
+    return moved;
+  });
 }
 
-// Let go of block `id`: it falls straight down onto the table (or the floor if it
-// was carried off the table's edge) and sits square to the table again.
-// Returns { blocks, on } where `on` says what it landed on.
+// Let go of block `id`: it falls straight down until it rests on the table (or the
+// floor, off the table's edge) or on the highest block beneath its footprint. It
+// lands square to the table, and if it mostly covers the block under it (more than
+// SNAP_OVERLAP) it snaps exactly on top, so a tower lines up neatly.
+// Returns { blocks, on, snapped }: `on` is 'table', 'floor' or the id of the block under it.
 export function dropBlock(blocks, id, size = BLOCK_SIZE) {
   const b = blocks.find((x) => x.id === id);
-  if (!b) return { blocks, on: null };
-  const table = onTable(b.x, b.z);
-  const out = { ...b, y: (table ? TABLE.top : 0) + size / 2, yaw: 0 };
-  return { blocks: blocks.map((x) => (x.id === id ? out : x)), on: table ? 'table' : 'floor' };
+  if (!b) return { blocks, on: null, snapped: false };
+  const { top, under } = supportFor(blocks, b, size);
+  const out = { ...b, y: top + size / 2, yaw: 0 };
+  const snapped = !!under && footprintOverlap(b, under, size) > SNAP_OVERLAP;
+  if (snapped) { out.x = under.x; out.z = under.z; }
+  const on = under ? under.id : onTable(b.x, b.z) ? 'table' : 'floor';
+  return { blocks: blocks.map((x) => (x.id === id ? out : x)), on, snapped };
+}
+
+// True when every block is part of one tower: sorted by height, each one rests
+// exactly one block-height above the one before and overlaps it.
+export function isOneStack(blocks, size = BLOCK_SIZE) {
+  const s = [...blocks].sort((a, b) => a.y - b.y);
+  for (let i = 1; i < s.length; i++) {
+    if (Math.abs(s[i].y - s[i - 1].y - size) > 1e-6 || footprintOverlap(s[i], s[i - 1], size) === 0) return false;
+  }
+  return s.length > 0;
 }
 
 // Grabbing over time. Feed it the arm's eased grip and the gripper point every frame:
@@ -75,7 +127,7 @@ export function createStacker(size = BLOCK_SIZE) {
     if (!held) return null;
     const id = held, r = dropBlock(blocks, id, size);
     blocks = r.blocks; held = null;
-    return { type: 'drop', id, on: r.on };
+    return { type: 'drop', id, on: r.on, snapped: r.snapped };
   }
 
   return {

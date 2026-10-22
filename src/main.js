@@ -159,7 +159,10 @@ const pinch = createPinchLatch();
 const stacker = createStacker();
 function logBlock(ev) {
   if (ev.type === 'grab') panel.add('ACT', `grab the ${ev.id} block`);
-  else if (ev.type === 'drop') panel.add('ACT', `drop the ${ev.id} block on the ${ev.on}`);
+  else if (ev.type === 'drop') {
+    const where = ev.on === 'table' || ev.on === 'floor' ? 'the ' + ev.on : `the ${ev.on} block` + (ev.snapped ? ', snapped into line' : '');
+    panel.add('ACT', `drop the ${ev.id} block on ${where}`);
+  }
 }
 const joints = createJointPanel($('jointSliders'), ARM_LIMITS, armSliderPose, (p) => { armSliderPose = clampArmPose(p); });
 $('jointDebug').addEventListener('change', () => {
