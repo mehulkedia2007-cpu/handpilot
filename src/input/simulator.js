@@ -12,7 +12,7 @@ const PRESETS = [
 export function createSimulator(slidersEl, presetsEl) {
   const bends = { thumb: 0.5, index: 0.8, middle: 0.8, ring: 0.8, pinky: 0.8 };
   let yaw = 0;
-  let height = 0.5, reach = 0.5;   // 0–1, only used by the arm
+  let height = 0.5, reach = 0.5, pinch = 0;   // 0–1, only used by the arm
   let locked = false;   // true while the camera is in control
   const sliders = {}, outs = {};
 
@@ -43,6 +43,7 @@ export function createSimulator(slidersEl, presetsEl) {
   }
   addSlider('height', 'Height', 50, (v) => { height = v; });
   addSlider('reach', 'Reach', 50, (v) => { reach = v; });
+  addSlider('pinch', 'Pinch', 0, (v) => { pinch = v; });
 
   for (const [label, values] of PRESETS) {
     const b = document.createElement('button');
@@ -63,7 +64,8 @@ export function createSimulator(slidersEl, presetsEl) {
         // y: image y grows downward, so a higher hand has a smaller y.
         // z: reaching out means a smaller (farther) palm in the image.
         palm: { x: palmXFromYaw(yaw), y: 1 - height, z: lerp(DEPTH_RANGE[1], DEPTH_RANGE[0], reach) },
-        pinch: null, builtInGesture: null, builtInScore: 0, t: now,
+        // Pinch 0% = thumb and index apart (about 1.2 palm widths), 100% = touching.
+        pinch: lerp(1.2, 0, pinch), builtInGesture: null, builtInScore: 0, t: now,
       };
     },
     // While the camera drives, the finger sliders are disabled and just display its values.

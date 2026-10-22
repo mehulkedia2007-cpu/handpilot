@@ -9,6 +9,7 @@ import { loadSettings, saveSettings, defaultSettings, ROBOTS } from './core/sett
 import { ARM_LIMITS, defaultArmPose, clampArmPose } from './core/armSpec.js';
 import { targetFromPalm } from './core/workspace.js';
 import { solveIK } from './core/ik.js';
+import { createPinchLatch } from './core/pinch.js';
 import { createSimulator } from './input/simulator.js';
 import { createCamera, CAMERA_BLOCKED_MSG } from './input/camera.js';
 import { createHud } from './ui/hud.js';
@@ -149,6 +150,7 @@ function applyPose(target, alpha) {
 const armCur = defaultArmPose();       // what the model shows, eased toward a goal each frame
 let armSliderPose = defaultArmPose();  // the debug sliders' pose
 let jointDebug = false;
+const pinch = createPinchLatch();
 const joints = createJointPanel($('jointSliders'), ARM_LIMITS, armSliderPose, (p) => { armSliderPose = clampArmPose(p); });
 $('jointDebug').addEventListener('change', () => {
   jointDebug = $('jointDebug').checked;
@@ -193,7 +195,13 @@ function frame() {
     const goal = hand && !jointDebug ? targetFromPalm(hf.palm) : null;
     let want = null, reachable = true;
     if (jointDebug) want = armSliderPose;
-    else if (goal) { const ik = solveIK(goal); reachable = ik.reachable; want = { ...ik, grip: armCur.grip }; }
+    else if (goal) {
+      const ik = solveIK(goal); reachable = ik.reachable;
+      const wasClosed = pinch.closed, closed = pinch.update(hf.pinch);
+      if (closed !== wasClosed) panel.add('ACT', closed ? 'pinch seen, close the gripper' : 'pinch released, open the gripper');
+      // The grip eases toward 0 or 1 like the joints do, which animates the fingers.
+      want = { ...ik, grip: closed ? 1 : 0 };
+    }
     if (want) blendPose(armCur, clampArmPose(want), POSE_ALPHA);
     arm.apply(armCur);
     arm.showTarget(goal, reachable);
