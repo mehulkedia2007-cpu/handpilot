@@ -16,12 +16,13 @@ export class Agent {
     this.pend = null; this.pendSince = 0;
     this.holdMs = 900; this.idleMs = 3000; this.graceMs = 250; this.greetMs = 3000;
     this.progress = 0;
+    this.actText = null;   // optional { MODE: text } to describe actions for another robot
   }
 
   setMode(now, mode, why, act) {
     if (mode === this.mode) return;
     this.mode = mode; this.modeSince = now;
-    this.onLog('DECIDE', why); this.onLog('ACT', act);
+    this.onLog('DECIDE', why); this.onLog('ACT', (this.actText && this.actText[mode]) || act);
   }
 
   // Only show hold progress for a gesture that would actually change something.

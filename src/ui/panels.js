@@ -4,6 +4,7 @@ import { LABEL } from '../core/gestures.js';
 
 const NAMES = { thumb: 'Thumb', index: 'Index', middle: 'Middle', ring: 'Ring', pinky: 'Pinky' };
 const DRIVES = { thumb: 'drives head nod', index: 'drives right shoulder', middle: 'drives right elbow', ring: 'drives left shoulder', pinky: 'drives left elbow' };
+const ARM_DRIVES = { thumb: 'pinch with index to grab', index: 'pinch with thumb to grab', middle: 'used for commands', ring: 'used for commands', pinky: 'used for commands' };
 const ACT_TEXT = { MANUAL: 'copy finger bends to joints', HOLD: 'hold every joint still', AUTO: 'run the dance routine', IDLE: 'ease to neutral pose', GREET: 'wave the right arm' };
 const GUIDE = [
   ['Open palm', [0, 0, 0, 0, 0], 'MANUAL. The robot mirrors your fingers.'],
@@ -14,14 +15,16 @@ const GUIDE = [
 
 // One bar per finger showing its bend percentage.
 export function createChannels(el) {
-  const bars = {}, vals = {};
+  const bars = {}, vals = {}, tos = {};
   for (const n of FINGERS) {
     const row = document.createElement('div'); row.className = 'ch';
     row.innerHTML = `<span class="n">${NAMES[n]}</span><span class="bar"><i></i></span><span class="val">0</span><span class="to">${DRIVES[n]}</span>`;
     el.appendChild(row);
-    bars[n] = row.querySelector('i'); vals[n] = row.querySelector('.val');
+    bars[n] = row.querySelector('i'); vals[n] = row.querySelector('.val'); tos[n] = row.querySelector('.to');
   }
   return {
+    // The arm uses fingers differently, so relabel what each one drives.
+    setRobot(robot) { for (const n of FINGERS) tos[n].textContent = (robot === 'arm' ? ARM_DRIVES : DRIVES)[n]; },
     update(b) {
       for (const n of FINGERS) {
         const v = Math.round(b[n] * 100);
@@ -40,6 +43,7 @@ function fmt(ms) {
 export function createAgentPanel(els, t0) {
   const items = [];
   let dirty = true;   // only rebuild the log's DOM when something was added
+  let actText = ACT_TEXT;
 
   function add(tag, text) {
     items.unshift({ t: performance.now() - t0, tag, text });
@@ -51,7 +55,7 @@ export function createAgentPanel(els, t0) {
     els.agentMode.textContent = mode;
     els.pSee.textContent = hand ? 'hand tracked, gesture: ' + LABEL[gesture] : 'no hand in view';
     els.pDecide.textContent = 'mode ' + mode;
-    els.pAct.textContent = ACT_TEXT[mode];
+    els.pAct.textContent = actText[mode];
     if (!dirty) return;
     dirty = false;
     els.log.textContent = '';
@@ -63,7 +67,7 @@ export function createAgentPanel(els, t0) {
     }
   }
 
-  return { add, update };
+  return { add, update, setActText(map) { actText = map || ACT_TEXT; } };
 }
 
 // Static list of command gestures with a little five-bar glyph of the hand shape.

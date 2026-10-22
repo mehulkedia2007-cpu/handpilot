@@ -154,3 +154,12 @@ test('blendPose eases toward the target', () => {
   blendPose(cur, { a: 10 }, 0.5);
   assert.equal(cur.a, 7.5);
 });
+
+test('actText swaps the ACT wording without changing the decision', () => {
+  const { agent, log, run } = makeAgent();
+  agent.actText = { HOLD: 'freeze the arm' };
+  run(show('NONE'), 100);
+  run(show('FIST'), 1200);
+  assert.equal(agent.mode, 'HOLD');
+  assert.ok(log.includes('ACT: freeze the arm'), log.join('\n'));
+});

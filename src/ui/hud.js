@@ -14,7 +14,10 @@ export const MODE_DESC = {
 const RING_LEN = 113.1;
 
 export function createHud(els) {
+  let desc = MODE_DESC;
   return {
+    // Swap the mode descriptions when the robot changes (null = the humanoid's).
+    setDescriptions(map) { desc = map || MODE_DESC; },
     // render and track are PerfMeters; track is null while the simulator drives.
     perf(render, track) {
       let text = `Render ${Math.round(render.rate)} fps`;
@@ -30,7 +33,7 @@ export function createHud(els) {
       els.modeBadge.dataset.mode = st.mode;
       els.gestureBox.dataset.mode = st.mode;
       els.modeName.textContent = st.mode;
-      els.modeDesc.textContent = MODE_DESC[st.mode];
+      els.modeDesc.textContent = desc[st.mode];
       els.gestureName.textContent = hand ? LABEL[gesture] : 'no hand';
       els.ringFg.style.strokeDashoffset = String(RING_LEN * (1 - st.progress));
       els.handChip.hidden = !(hand && hf.handedness);

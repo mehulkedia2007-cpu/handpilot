@@ -8,7 +8,7 @@ import { PerfMeter } from './core/perf.js';
 import { loadSettings, saveSettings, defaultSettings, ROBOTS } from './core/settings.js';
 import { ARM_LIMITS, defaultArmPose, clampArmPose } from './core/armSpec.js';
 import { targetFromPalm } from './core/workspace.js';
-import { solveIK } from './core/ik.js';
+import { armGoalFor, ARM_MODE_DESC, ARM_ACT_TEXT } from './core/armMotion.js';
 import { createPinchLatch } from './core/pinch.js';
 import { createSimulator } from './input/simulator.js';
 import { createCamera, CAMERA_BLOCKED_MSG } from './input/camera.js';
@@ -31,7 +31,7 @@ const panel = createAgentPanel({ agentMode: $('agentMode'), pSee: $('pSee'), pDe
 const agent = new Agent(panel.add, performance.now());
 panel.add('SEE', 'simulator input active');
 panel.add('DECIDE', 'mode MANUAL, nothing to override');
-panel.add('ACT', 'copy finger bends to joints');
+panel.add('ACT', settings.robot === 'arm' ? ARM_ACT_TEXT.MANUAL : 'copy finger bends to joints');
 
 const hud = createHud({
   modeBadge: $('modeBadge'), gestureBox: $('gestureBox'), modeName: $('modeName'), modeDesc: $('modeDesc'),
@@ -168,6 +168,11 @@ function showRobot() {
   if (arm) arm.setVisible(isArm);
   if (stage) stage.setView(isArm ? 0.7 : 0.45, isArm ? 1.12 : 1.28);
   $('armJoints').hidden = !isArm;
+  // Describe modes and actions in terms of the robot on screen.
+  agent.actText = isArm ? ARM_ACT_TEXT : null;
+  hud.setDescriptions(isArm ? ARM_MODE_DESC : null);
+  panel.setActText(isArm ? ARM_ACT_TEXT : null);
+  channels.setRobot(settings.robot);
   robotSwitch.show(settings.robot);
 }
 const robotSwitch = createRobotSwitch($('robotSwitch'), ROBOTS, settings.robot, (r) => {
@@ -192,19 +197,25 @@ function frame() {
   const target = poseFor(st.mode, t, b, yawFromPalmX(hf.palm.x));
   if (target) applyPose(target, POSE_ALPHA);
   if (arm && settings.robot === 'arm') {
-    const goal = hand && !jointDebug ? targetFromPalm(hf.palm) : null;
-    let want = null, reachable = true;
-    if (jointDebug) want = armSliderPose;
-    else if (goal) {
-      const ik = solveIK(goal); reachable = ik.reachable;
-      const wasClosed = pinch.closed, closed = pinch.update(hf.pinch);
-      if (closed !== wasClosed) panel.add('ACT', closed ? 'pinch seen, close the gripper' : 'pinch released, open the gripper');
-      // The grip eases toward 0 or 1 like the joints do, which animates the fingers.
-      want = { ...ik, grip: closed ? 1 : 0 };
+    if (jointDebug) {
+      blendPose(armCur, armSliderPose, POSE_ALPHA);
+      arm.showTarget(null);
+    } else {
+      // Only a hand in MANUAL can grab; other modes leave the latch as it was.
+      let closed = pinch.closed;
+      if (st.mode === 'MANUAL' && hand) {
+        const was = closed;
+        closed = pinch.update(hf.pinch);
+        if (closed !== was) panel.add('ACT', closed ? 'pinch seen, close the gripper' : 'pinch released, open the gripper');
+      }
+      const manual = { target: hand ? targetFromPalm(hf.palm) : null, closed };
+      // Seconds since the mode began, so the AUTO demo always starts from the top.
+      const goal = armGoalFor(st.mode, (now - agent.modeSince) / 1000, manual);
+      // The grip eases toward its goal like the joints do, which animates the fingers.
+      if (goal) blendPose(armCur, goal.pose, POSE_ALPHA);
+      arm.showTarget(goal && goal.target, goal ? goal.reachable : true);
     }
-    if (want) blendPose(armCur, clampArmPose(want), POSE_ALPHA);
     arm.apply(armCur);
-    arm.showTarget(goal, reachable);
   }
   if (stage) stage.render();
   cam.perf.update(now);
