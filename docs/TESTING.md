@@ -32,6 +32,21 @@ Run `npm test` first; it must pass. Then go through this list in Chrome at the e
 - [x] Ticking **Drive joints with the sliders** lets each slider move its joint; **Park arm** returns to the folded pose. Unticking hands control back to the hand.
 - [x] Select Arm and reload: the arm is still selected. **Reset to defaults** goes back to Humanoid.
 
+## Pick-and-place challenge (Phase 3)
+- [ ] With **Arm** selected, a table with red, green and blue blocks appears, plus the **Stacking challenge** panel. With Humanoid, both are hidden.
+- [ ] Moving the gripper (Turn / Height / Reach) close to the top of a block makes it glow.
+- [ ] Raising **Pinch** above about 70% while a block glows grabs it; it moves and turns with the gripper. The fingers stop at its sides.
+- [ ] Closing the gripper away from every block grabs nothing; sweeping a closed gripper over a block doesn't pick it up.
+- [ ] Pushing a held block down into the table or another block doesn't sink it in.
+- [ ] Opening the pinch over the table drops the block; it falls and lands flat and square.
+- [ ] Dropping a block mostly over another lands it on top and lines it up exactly; dropping it about half over lands on top but leaves it offset.
+- [ ] A block with another block on top can't be grabbed.
+- [ ] **Peace sign** (AUTO) on fresh blocks picks up red and stacks it on blue.
+- [ ] **Start** resets the blocks and starts the timer (also shown on the stage). Stacking all three into one tower stops it, shows the time, and saves it as best if faster.
+- [ ] Reload: the best time is still shown. **Reset to defaults** doesn't clear it.
+- [ ] **Restart** during a run starts a fresh run; **Reset blocks** puts the blocks back and stops the timer.
+- [ ] Switching to Humanoid while holding a block drops it; switching during a run cancels the run.
+
 ## Camera (Chrome, Edge, Safari)
 - [x] **Start camera** asks for permission, then shows the preview with the hand skeleton. The note says whether the model runs on the GPU or CPU.
 - [ ] The stage shows a **Left hand** / **Right hand** chip that matches the hand you actually raised.
@@ -47,6 +62,7 @@ Run `npm test` first; it must pass. Then go through this list in Chrome at the e
 - [x] Arm: moving your hand moves the target sphere smoothly; pushing your hand toward the camera moves it toward the arm's base.
 - [x] Arm: pinching thumb and index closes the gripper, opening them releases it, with no flicker at the edge.
 - [x] Arm: removing your hand for 3 s parks the arm.
+- [ ] Challenge: a full tower can be built with a real hand (pinch to grab, open to drop).
 - [ ] Camera blocked (deny permission): a clear message appears and the simulator still works.
 - [ ] Camera busy (open it in another app first): the "in use by another app" message appears.
 - [ ] Model fails to load (DevTools → Network → Offline, then Start camera): the "hand model could not load" message appears, and Start camera works again once back online.

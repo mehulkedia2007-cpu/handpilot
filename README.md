@@ -4,8 +4,13 @@
 
 **Live demo:** https://mehulkedia2007-cpu.github.io/handpilot/
 
-<!-- Demo GIF goes here in Phase 3: ![HandPilot demo](docs/media/demo.gif) -->
-> *Demo GIF coming in Phase 3.*
+<!-- DEMO GIF: record docs/media/demo.gif (10–15 s, see docs/media/README.md), then replace the line below with:
+![HandPilot demo: stacking three blocks with a hand-controlled robot arm](docs/media/demo.gif) -->
+> *Demo GIF: coming soon.*
+
+<!-- DEMO VIDEO: upload the 30-second video (e.g. YouTube, unlisted), then replace the line below with:
+**Watch the 30-second demo:** https://... -->
+> *30-second demo video: coming soon.*
 
 ## Features
 
@@ -27,10 +32,11 @@
 - **Calibration and saved settings.** "Set open hand" and "Set fist" fit the bend scale to your hand. Calibration and filter settings are saved in your browser, with a Reset to defaults button.
 - **Live agent log** showing every decision and why it was made.
 - **Robot arm teleoperation.** Switch between Humanoid and Arm in the header. Your palm moves a target sphere inside a workspace box (left/right, up/down, and depth from how big your hand looks), and **inverse kinematics** works out the base, shoulder, elbow and wrist angles to put the gripper there, keeping it level. The sphere turns red when the target is out of reach. **Pinch** thumb and index to close the gripper; hysteresis stops it chattering. The same gestures work: fist holds, peace sign runs a pick-and-place demo, thumbs up waves, and with no hand the arm parks itself. A debug panel shows the live joint angles and can drive them by hand.
+- **Pick-and-place stacking challenge.** With the arm selected, three blocks (red, green, blue) sit on a table. Move the gripper over a block until it glows, pinch to grab it, and open your fingers to drop it: it falls straight down onto the table or the highest block under it, and snaps neatly into line when it covers more than 60% of that block. Press **Start** and stack all three into one tower as fast as you can; the timer stops when the tower stands, and your best time is saved in the browser. The peace-sign AUTO demo uses the same rules and really stacks the red block on the blue one.
 
 MediaPipe's built-in gestures drive the commands when it is confident; otherwise the rule-based classifier on the bends decides (and always does for the simulator).
 
-Coming next (see [the build plan](#roadmap)): a pick-and-place block-stacking challenge, in-browser gesture learning (KNN), and an LLM agent with tool calling.
+Coming next (see [the build plan](#roadmap)): recording and replaying motions, in-browser gesture learning (KNN), and an LLM agent with tool calling.
 
 ## Run it locally
 
@@ -53,7 +59,7 @@ Your browser opens **http://localhost:5173**. Click **Start camera** and allow a
 npm test
 ```
 
-This runs Node's built-in test runner on `tests/`. The tests cover the pure logic in `src/core/` (finger maths, gesture rules, the agent state machine, robot poses, the One Euro filter, saved settings and the FPS meter), need no browser or network, and finish in under a second.
+This runs Node's built-in test runner on `tests/`. The tests cover the pure logic in `src/core/` (finger maths, gesture rules, the agent state machine, robot poses, the One Euro filter, saved settings, the FPS meter, inverse kinematics, pinch, block stacking and the challenge timer), need no browser or network, and finish in under a second.
 
 ## How it works
 
@@ -66,6 +72,7 @@ Simulator sliders ────────────────────�
                  core/gestures.js built-in label, or rules on the bends ─► gesture name
                  core/agent.js    SEE ─► DECIDE (mode) ─► ACT (target pose)
                  core/workspace.js + core/ik.js + core/pinch.js  (arm) palm ─► 3D target ─► joint angles, pinch ─► grip
+                 core/stacking.js + core/challenge.js  grip + gripper point ─► grab, drop, stack ─► timer
                                            ▼
                  scene/*          Three.js renders the robot
 ```
@@ -80,7 +87,7 @@ More detail is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Plain-language e
 
 ## Privacy
 
-**Video never leaves your browser.** Every frame is processed on your own machine inside the browser tab. Nothing is uploaded, recorded or stored. The only network requests download libraries (Three.js, MediaPipe) and fonts from public CDNs. Calibration and filter settings are saved in your browser's `localStorage` (key `handpilot.settings.v1`) and never sent anywhere.
+**Video never leaves your browser.** Every frame is processed on your own machine inside the browser tab. Nothing is uploaded, recorded or stored. The only network requests download libraries (Three.js, MediaPipe) and fonts from public CDNs. Calibration and filter settings are saved in your browser's `localStorage` (key `handpilot.settings.v1`), and your best challenge time under `handpilot.challenge.v1`. Neither is ever sent anywhere.
 
 ## Deploy
 
@@ -101,7 +108,7 @@ src/input/          camera + simulator
 src/scene/          Three.js stage and robot
 src/ui/             HUD and panels
 tests/              node:test unit tests
-docs/               architecture, learning notes, manual test checklist
+docs/               architecture, learning notes, manual test checklist, media (demo GIF)
 reference/          the original single-file prototype
 ```
 
@@ -112,7 +119,7 @@ reference/          the original single-file prototype
 | 0 ✅ | Project set up: modules, tests, docs, deploy |
 | 1 ✅ | MediaPipe Gesture Recognizer, One Euro filter, saved settings, FPS HUD |
 | 2 ✅ | Robot arm teleoperation with inverse kinematics and pinch-to-grab |
-| 3 | Pick-and-place block-stacking challenge |
+| 3 ✅ | Pick-and-place block-stacking challenge |
 | 4 | Record/replay motions and train custom gestures in the browser (KNN) |
 | 5 | LLM agent with tool calling and safety limits |
 | 6 | Optional real servo over Web Serial, and launch polish |

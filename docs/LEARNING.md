@@ -155,3 +155,35 @@ The agent from Phase 0 still decides the mode (MANUAL, HOLD, AUTO, IDLE, GREET) 
 Keeping the decision (agent) separate from the action (pose for each robot) is what made adding a second robot a small change instead of a rewrite.
 
 **Interview line:** *"I added a robot arm you control with your hand. The palm position maps to a 3D target, and I wrote an analytic inverse-kinematics solver (base yaw plus the law of cosines) that I test by checking forward kinematics lands back on the target. Pinch-to-grab uses hysteresis so the gripper doesn't flicker, and the same agent drives both robots."*
+
+## Phase 3: Pick-and-place challenge
+
+### 1. Logic in, positions out
+All the block rules live in `core/stacking.js` as pure functions: block positions go in, new positions come out. The 3D code in `scene/blocks.js` only draws them. That split means every rule (grab, drop, stack, snap, "is it one tower?") is tested in Node, and the drawing code has nothing to get wrong except where to put a cube.
+
+There's no physics engine. A real one (gravity, friction, collisions) would be a big dependency and hard to make behave. Three simple rules are enough for a fun game:
+- **Grab:** when the grip closes, take the nearest block whose top is within a small radius of the gripper point.
+- **Drop:** when it opens, the block falls straight down onto whatever is highest under it.
+- **Snap:** if it lands mostly on another block, line it up exactly.
+
+### 2. Where is the gripper, really?
+The hand sets a *target*, but the arm eases toward it and might not reach it. To decide what's under the gripper, we use **forward kinematics** on the arm's current angles, which gives where the gripper actually is. The same FK we wrote to test IK in Phase 2 now does real work.
+
+The blocks also listen to the arm's eased **grip**, not the pinch. So anything that moves the arm (your hand, the debug sliders, the AUTO demo) can pick blocks up, with no special cases. The grip gets its own two thresholds (close above 0.6, open below 0.4), which is the same hysteresis idea as the pinch.
+
+### 3. Footprint overlap
+Seen from above, a block is a square. Two squares that are axis-aligned overlap by
+
+```
+overlap = max(0, size − |dx|) × max(0, size − |dz|) / size²
+```
+
+which is 1 when they line up, 0 when they don't touch, and 0.5 when one is shifted half a block. Blocks are always set down square to the table (yaw = 0), which keeps this formula exact. When a dropped block lands on another with more than 0.6 overlap, we snap it to the same x and z. That makes stacking forgiving with a wobbly hand, without making sloppy drops look perfect.
+
+### 4. Falling, and finding what's beneath
+"Falls straight down" means: look at every other block that overlaps the falling block's footprint and sits lower, take the highest top among them (or the table), and rest there. The logic answers instantly; the scene then animates the fall with simple gravity (`v += g·dt`, `y −= v·dt`) so it doesn't teleport. Keeping the animation in the scene and the answer in the logic means the tests never have to wait for anything to fall.
+
+### 5. A tiny state machine for the game
+The challenge is three states: **ready → running → won**. Start resets the blocks and records the start time. Each frame it checks "one tower, nothing held"; the first time that's true it stores the time and moves to won. Like the agent, it takes `now` as an argument instead of reading the clock, so tests can pretend 12.5 seconds passed. The best time is stored in `localStorage` with the same try/catch and validation as the settings.
+
+**Interview line:** *"I turned the arm into a game: you stack blocks with your hand against a timer. The grab, drop and stacking rules are pure functions I unit-test, including an end-to-end test where the arm's automatic routine really stacks one block on another. I used forward kinematics to find where the gripper actually is, and footprint overlap to decide when a block snaps into place."*

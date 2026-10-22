@@ -66,3 +66,15 @@ ArmPose = {
   grip       // 0 = open, 1 = closed
 }
 ```
+
+## Block
+
+One block in the stacking challenge (`core/stacking.js`). Every block is a cube `BLOCK_SIZE` wide.
+
+```js
+Block = {
+  id,        // "red" | "green" | "blue"
+  x, y, z,   // centre, world units; resting on the table means y = TABLE.top + BLOCK_SIZE / 2
+  yaw        // turn around the vertical axis; follows the arm while held, 0 once dropped
+}
+```

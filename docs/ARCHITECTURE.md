@@ -35,10 +35,26 @@ pinch ─► core/pinch.js latch (close < 0.35, open > 0.5) ──► armGoalFor
                                scene/arm.js rotates base, shoulder, elbow, wrist and slides the gripper fingers
 ```
 
+Then the blocks (Phase 3):
+
+```
+eased arm pose ─► core/ik.js forwardKinematics ─► gripper point (where the gripper really is)
+                                                              ▼
+eased grip ─► core/stacking.js createStacker.step(grip, point, yaw)
+                │  grip passes 0.6: grab the nearest uncovered block whose top is within 0.25
+                │  while held: the block hangs from the fingers (never sunk into the table or a block)
+                │  grip passes 0.4: dropBlock, which lands it on the highest block under it or the table,
+                │                   snapping into line above 60% overlap
+                ▼
+scene/blocks.js draws the table and blocks (with a short fall animation)
+core/challenge.js: Start → running → won when isOneStack(blocks) and nothing is held → best time saved
+```
+
+The blocks follow the arm's *eased* grip, not the pinch, so whatever moves the arm (hand, joint sliders, the AUTO demo) can pick blocks up.
+
 The agent itself doesn't know which robot is on screen. It decides the mode the same way for both; `main.js` only gives it different wording (`agent.actText`) for the log.
 
 Later phases add these pieces:
-- `core/stacking.js` (Phase 3)
 - `core/knn.js` and `core/motion.js` (Phase 4)
 - the LLM agent and `server/` (Phase 5)
 
@@ -60,6 +76,8 @@ The camera runs its own loop (`input/camera.js`). It calls `recognizeForVideo` o
 ## Saved settings
 
 `core/settings.js` loads and saves one JSON object under `handpilot.settings.v1`: calibration, filter settings, selected robot and gesture mappings. `main.js` passes in `localStorage` (or `null` if even touching it throws). Every field is validated on load, so a corrupt or old value falls back to its default without losing the others.
+
+The challenge's best time is kept under its own key, `handpilot.challenge.v1`, by `core/challenge.js`, with the same try/catch and validation. It is separate so that **Reset to defaults** doesn't wipe a record.
 
 ## Module rules
 
