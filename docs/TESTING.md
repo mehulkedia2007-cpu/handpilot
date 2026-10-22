@@ -2,11 +2,13 @@
 
 Run `npm test` first; it must pass. Then go through this list in Chrome at the end of each phase. Tick an item only when you have actually tried it.
 
+Phase 3 items were ticked after an automated run in headless Chromium (Playwright, driving the simulator sliders, 57/57 checks) plus the owner's camera tries. MediaPipe prints one harmless `INFO: Created TensorFlow Lite XNNPACK delegate for CPU` line through `console.error` when the camera starts; that is not an app error.
+
 ## Simulator only (no camera)
 - [x] The page loads with no errors in the console (DevTools → Console).
 - [x] The robot renders; dragging orbits the view and the scroll wheel zooms.
 - [x] With the 3D view focused (Tab to it), the arrow keys orbit and +/- zoom.
-- [ ] Moving each finger slider moves the matching joint (see the "drives …" labels).
+- [x] Moving each finger slider moves the matching joint (see the "drives …" labels).
 - [x] The Turn slider turns the robot.
 - [x] Holding **Fist** for about 1 s switches to HOLD and the robot freezes.
 - [x] Holding **Open palm** returns to MANUAL.
@@ -19,7 +21,7 @@ Run `npm test` first; it must pass. Then go through this list in Chrome at the e
 - [x] The top-right HUD shows **Render NN fps**, updating about once a second.
 - [ ] Moving **Min cutoff** down and **Beta** up changes how fast the robot follows a preset change.
 - [x] Change the filter sliders, reload: the values are kept. **Reset to defaults** puts them back to 1.0 / 1.0, and they stay after a reload.
-- [ ] In a private window the app still works (settings may or may not persist, but nothing breaks).
+- [x] In a private window the app still works (settings may or may not persist, but nothing breaks).
 
 ## Robot arm (Phase 2)
 - [x] The **Humanoid / Arm** switch in the header swaps the robot; the pressed button is highlighted.
@@ -33,19 +35,19 @@ Run `npm test` first; it must pass. Then go through this list in Chrome at the e
 - [x] Select Arm and reload: the arm is still selected. **Reset to defaults** goes back to Humanoid.
 
 ## Pick-and-place challenge (Phase 3)
-- [ ] With **Arm** selected, a table with red, green and blue blocks appears, plus the **Stacking challenge** panel. With Humanoid, both are hidden.
+- [x] With **Arm** selected, a table with red, green and blue blocks appears, plus the **Stacking challenge** panel. With Humanoid, both are hidden.
 - [ ] Moving the gripper (Turn / Height / Reach) close to the top of a block makes it glow.
-- [ ] Raising **Pinch** above about 70% while a block glows grabs it; it moves and turns with the gripper. The fingers stop at its sides.
-- [ ] Closing the gripper away from every block grabs nothing; sweeping a closed gripper over a block doesn't pick it up.
+- [x] Raising **Pinch** above about 70% while a block glows grabs it; it moves and turns with the gripper. The fingers stop at its sides.
+- [x] Closing the gripper away from every block grabs nothing; sweeping a closed gripper over a block doesn't pick it up.
 - [ ] Pushing a held block down into the table or another block doesn't sink it in.
-- [ ] Opening the pinch over the table drops the block; it falls and lands flat and square.
-- [ ] Dropping a block mostly over another lands it on top and lines it up exactly; dropping it about half over lands on top but leaves it offset.
-- [ ] A block with another block on top can't be grabbed.
-- [ ] **Peace sign** (AUTO) on fresh blocks picks up red and stacks it on blue.
-- [ ] **Start** resets the blocks and starts the timer (also shown on the stage). Stacking all three into one tower stops it, shows the time, and saves it as best if faster.
-- [ ] Reload: the best time is still shown. **Reset to defaults** doesn't clear it.
-- [ ] **Restart** during a run starts a fresh run; **Reset blocks** puts the blocks back and stops the timer.
-- [ ] Switching to Humanoid while holding a block drops it; switching during a run cancels the run.
+- [x] Opening the pinch over the table drops the block; it falls and lands flat and square.
+- [x] Dropping a block mostly over another lands it on top and lines it up exactly; dropping it about half over lands on top but leaves it offset.
+- [x] A block with another block on top can't be grabbed.
+- [x] **Peace sign** (AUTO) on fresh blocks picks up red and stacks it on blue.
+- [x] **Start** resets the blocks and starts the timer (also shown on the stage). Stacking all three into one tower stops it, shows the time, and saves it as best if faster.
+- [x] Reload: the best time is still shown. **Reset to defaults** doesn't clear it.
+- [x] **Restart** during a run starts a fresh run; **Reset blocks** puts the blocks back and stops the timer.
+- [x] Switching to Humanoid while holding a block drops it; switching during a run cancels the run.
 
 ## Camera (Chrome, Edge, Safari)
 - [x] **Start camera** asks for permission, then shows the preview with the hand skeleton. The note says whether the model runs on the GPU or CPU.
@@ -63,8 +65,8 @@ Run `npm test` first; it must pass. Then go through this list in Chrome at the e
 - [x] Arm: pinching thumb and index closes the gripper, opening them releases it, with no flicker at the edge.
 - [x] Arm: removing your hand for 3 s parks the arm.
 - [ ] Challenge: a full tower can be built with a real hand (pinch to grab, open to drop).
-- [ ] Humanoid: moving your hand left and right without leaving the picture turns the robot fully each way, and quick finger movements are followed without a noticeable delay.
-- [ ] Arm: at the default **Hand sensitivity** (1.6), moving your hand left and right without leaving the picture swings the arm to both ends of the table. Raising it makes the arm move further for the same hand movement; the setting survives a reload.
+- [x] Humanoid: moving your hand left and right without leaving the picture turns the robot fully each way, and quick finger movements are followed without a noticeable delay.
+- [x] Arm: at the default **Hand sensitivity** (1.6), moving your hand left and right without leaving the picture swings the arm to both ends of the table. Raising it makes the arm move further for the same hand movement; the setting survives a reload.
 - [ ] Camera blocked (deny permission): a clear message appears and the simulator still works.
 - [ ] Camera busy (open it in another app first): the "in use by another app" message appears.
 - [ ] Model fails to load (DevTools → Network → Offline, then Start camera): the "hand model could not load" message appears, and Start camera works again once back online.
