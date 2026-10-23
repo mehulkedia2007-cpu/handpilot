@@ -153,7 +153,11 @@
           <div class="seg" id="speedSwitch" role="group" aria-label="Replay speed"></div>
         </div>
         <ul class="mlist" id="motionList" aria-label="Saved motions"></ul>
-        <p class="note" id="motionNote" aria-live="polite">Record what the robot does, up to a minute, then play it back. Playing switches to the motion's robot. Hold any command gesture to stop a replay.</p>
+        <div class="row">
+          <button class="btn" id="btnMotionExport" type="button">Export all</button>
+          <button class="btn" id="btnMotionImport" type="button">Import</button>
+        </div>
+        <p class="note" id="motionNote" aria-live="polite">Record what the robot does, up to a minute, then play it back. Playing switches to the motion's robot. Hold any command gesture to stop a replay. Motions are saved in this browser; export them to keep a copy.</p>
       </section>
     </section>
   </main>

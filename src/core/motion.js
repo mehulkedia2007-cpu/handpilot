@@ -99,3 +99,120 @@ export function nextName(names, base = 'Motion') {
   while (taken.has(`${base} ${i}`.toLowerCase())) i++;
   return `${base} ${i}`;
 }
+
+/* ---------- the motion library: saving, checking, export and import ---------- */
+// Motions are saved under their own key, apart from settings, so Reset to defaults
+// never deletes them. Like settings, every storage call is wrapped in try/catch.
+export const MOTIONS_KEY = 'handpilot.motions.v1';
+export const MOTION_FILE = 'handpilot-motions';   // the "format" written into exported files
+export const NAME_MAX = 40;
+const MAX_SAMPLES = 5000;
+const MAX_ANGLE = 10;   // radians; real joints stay well inside this, so bigger means a broken file
+
+// Tidy a typed name: trim it and squash runs of spaces. Returns '' if nothing is left.
+export function cleanName(name) {
+  return typeof name === 'string' ? name.trim().replace(/\s+/g, ' ').slice(0, NAME_MAX) : '';
+}
+
+// Check one motion from storage or a file. Returns { motion } with a clean copy
+// (only the known fields), or { error } saying what's wrong in plain words.
+export function checkMotion(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { error: 'it is not a motion object' };
+  const name = cleanName(raw.name);
+  if (!name) return { error: 'it has no name' };
+  if (typeof raw.id !== 'string' || !/^[a-z0-9]{1,24}$/i.test(raw.id)) return { error: 'its id is missing or invalid' };
+  const keys = JOINT_KEYS[raw.robot];
+  if (!keys) return { error: `its robot must be ${Object.keys(JOINT_KEYS).map((k) => '"' + k + '"').join(' or ')}` };
+  const hz = raw.hz === undefined ? RECORD_HZ : raw.hz;
+  if (typeof hz !== 'number' || !(hz >= 1 && hz <= 240)) return { error: 'its sample rate (hz) is invalid' };
+  if (!Array.isArray(raw.samples) || raw.samples.length < 2) return { error: 'it needs at least 2 samples' };
+  if (raw.samples.length > MAX_SAMPLES) return { error: `it has more than ${MAX_SAMPLES} samples` };
+  const samples = [];
+  let prev = -Infinity;
+  for (const [i, s] of raw.samples.entries()) {
+    const where = `sample ${i + 1}`;
+    if (!s || typeof s.t !== 'number' || !Number.isFinite(s.t) || s.t < 0) return { error: `${where} has no valid time (t)` };
+    // Times must go forward, or the binary search in sampleAt() would give nonsense.
+    if (s.t <= prev) return { error: `${where} is not later than the one before` };
+    if (!s.joints || typeof s.joints !== 'object') return { error: `${where} has no joints` };
+    const joints = {};
+    for (const k of keys) {
+      const v = s.joints[k];
+      if (typeof v !== 'number' || !Number.isFinite(v) || Math.abs(v) > MAX_ANGLE) return { error: `${where} has a missing or invalid "${k}"` };
+      joints[k] = v;
+    }
+    samples.push({ t: s.t, joints });
+    prev = s.t;
+  }
+  return { motion: { id: raw.id, name, robot: raw.robot, hz, samples } };
+}
+
+// Saved motions. A bad entry is skipped rather than throwing the whole library away.
+export function loadMotions(storage) {
+  try {
+    const raw = JSON.parse(storage.getItem(MOTIONS_KEY));
+    if (!raw || !Array.isArray(raw.motions)) return [];
+    return raw.motions.map((m) => checkMotion(m).motion).filter(Boolean);
+  } catch (_) {
+    return [];
+  }
+}
+
+// Returns false if it couldn't save (blocked, private mode, or storage full).
+export function saveMotions(storage, motions) {
+  try {
+    storage.setItem(MOTIONS_KEY, JSON.stringify({ motions }));
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+// The text of an exported .json file. "format" and "version" let an import
+// recognise the file, and let a future version read old files.
+export function exportMotions(motions) {
+  return JSON.stringify({ format: MOTION_FILE, version: 1, motions });
+}
+
+// Read an exported file. Returns the motions, or throws an Error whose message
+// is ready to show the user. Nothing is imported unless every motion is valid.
+export function parseMotionFile(text) {
+  let raw;
+  try { raw = JSON.parse(text); } catch (_) { throw new Error('That file is not valid JSON.'); }
+  if (!raw || raw.format !== MOTION_FILE || !Array.isArray(raw.motions)) throw new Error('That is not a HandPilot motions file.');
+  if (raw.version !== 1) throw new Error(`That motions file is version ${raw.version}; this app reads version 1.`);
+  if (!raw.motions.length) throw new Error('That motions file has no motions in it.');
+  return raw.motions.map((m, i) => {
+    const r = checkMotion(m);
+    if (r.error) throw new Error(`Motion ${i + 1}${m && typeof m.name === 'string' ? ` ("${cleanName(m.name)}")` : ''} can't be imported: ${r.error}.`);
+    return r.motion;
+  });
+}
+
+// Add imported motions to a library. A motion already there (same id, same
+// content) is skipped; a clash of ids gets a new id, a clash of names "Name (2)".
+export function mergeMotions(existing, incoming, makeId = newMotionId) {
+  const list = existing.slice();
+  let added = 0, skipped = 0;
+  for (const m of incoming) {
+    const same = list.find((x) => x.id === m.id);
+    if (same && sameMotion(same, m)) { skipped++; continue; }
+    const copy = { ...m };
+    if (same) { do copy.id = makeId(); while (list.some((x) => x.id === copy.id)); }
+    copy.name = uniqueName(copy.name, list.map((x) => x.name));
+    list.push(copy); added++;
+  }
+  return { list, added, skipped };
+}
+
+// Compare the checked copies, so the order fields were written in doesn't matter.
+const canonical = (m) => JSON.stringify(checkMotion(m).motion);
+export const sameMotion = (a, b) => canonical(a) === canonical(b);
+
+export function uniqueName(name, names) {
+  const taken = new Set(names.map((n) => n.toLowerCase()));
+  if (!taken.has(name.toLowerCase())) return name;
+  let i = 2;
+  while (taken.has(`${name} (${i})`.toLowerCase())) i++;
+  return `${name} (${i})`;
+}

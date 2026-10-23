@@ -13,11 +13,12 @@ import { createPinchLatch } from './core/pinch.js';
 import { forwardKinematics } from './core/ik.js';
 import { createStacker, isOneStack, BLOCK_SIZE } from './core/stacking.js';
 import { createChallenge, formatTime, loadBest, saveBest, isNewBest } from './core/challenge.js';
-import { createRecorder, replayFrame, newMotionId, nextName, RECORD_HZ, MAX_RECORD_MS } from './core/motion.js';
+import { createRecorder, replayFrame, newMotionId, nextName, RECORD_HZ, MAX_RECORD_MS,
+  loadMotions, saveMotions, exportMotions, parseMotionFile, mergeMotions, cleanName } from './core/motion.js';
 import { createSimulator } from './input/simulator.js';
 import { createCamera, CAMERA_BLOCKED_MSG } from './input/camera.js';
 import { createHud } from './ui/hud.js';
-import { createChannels, createAgentPanel, buildGestureGuide, createRobotSwitch, createJointPanel } from './ui/panels.js';
+import { createChannels, createAgentPanel, buildGestureGuide, createRobotSwitch, createJointPanel, downloadText } from './ui/panels.js';
 import { createMotionsPanel } from './ui/motions.js';
 
 const $ = (id) => document.getElementById(id);
@@ -257,14 +258,50 @@ const robotSwitch = createRobotSwitch($('robotSwitch'), ROBOTS, settings.robot, 
 // Recording samples the pose the robot on screen is showing, about 30 times a second.
 // Replay hands the agent a REPLAY mode; each frame the loop asks core/motion.js
 // for the pose at that moment and the robot eases to it.
-let motions = [];      // { id, name, robot, hz, samples }, oldest first
+let motions = loadMotions(storage);   // { id, name, robot, hz, samples }, oldest first
 const recorder = createRecorder();
 let replay = null;     // { motion, since, speed } while the agent is in REPLAY
-const motionsUi = createMotionsPanel({ rec: $('btnRec'), state: $('recState'), speed: $('speedSwitch'), list: $('motionList'), note: $('motionNote') }, {
+const motionsUi = createMotionsPanel({
+  rec: $('btnRec'), state: $('recState'), speed: $('speedSwitch'), list: $('motionList'), note: $('motionNote'),
+  exportBtn: $('btnMotionExport'), importBtn: $('btnMotionImport'),
+}, {
   record: () => (recorder.recording ? stopRecording() : startRecording()),
   play: (id) => playMotion(id),
   stop: () => agent.endReplay(performance.now(), 'replay stopped from the panel'),
+  rename(id, typed) {
+    const name = cleanName(typed), m = motions.find((x) => x.id === id);
+    if (!name) return 'Type a name first.';
+    if (motions.some((x) => x !== m && x.name.toLowerCase() === name.toLowerCase())) return `There is already a motion called "${name}".`;
+    m.name = name;
+    storeMotions(`Renamed to "${name}".`);
+    return null;
+  },
+  remove(id) {
+    const m = motions.find((x) => x.id === id);
+    motions = motions.filter((x) => x.id !== id);
+    storeMotions(`Deleted "${m.name}".`);
+    panel.add('ACT', `deleted motion "${m.name}"`);
+  },
+  exportAll() {
+    downloadText('handpilot-motions.json', exportMotions(motions));
+    motionsUi.note(`Exported ${motions.length} motion${motions.length === 1 ? '' : 's'} to handpilot-motions.json.`);
+  },
+  importText(text) {
+    try {
+      const { list, added, skipped } = mergeMotions(motions, parseMotionFile(text));
+      motions = list;
+      storeMotions(`Imported ${added} motion${added === 1 ? '' : 's'}` + (skipped ? `, skipped ${skipped} already here.` : '.'));
+    } catch (e) {
+      motionsUi.note(e.message);   // a clear reason, and nothing was changed
+    }
+  },
 });
+// Save the library and redraw it. A full or blocked storage keeps the motions in memory.
+function storeMotions(msg) {
+  const ok = saveMotions(storage, motions);
+  motionsUi.note(msg + (ok ? '' : ' (This browser would not save it, so it lasts until you reload. Export to keep a copy.)'));
+  showMotions();
+}
 const playingId = () => (agent.mode === 'REPLAY' && agent.replay ? agent.replay.id : null);
 const showMotions = () => motionsUi.render(motions, { recording: recorder.recording, playingId: playingId() });
 
@@ -283,8 +320,9 @@ function stopRecording(why = '') {
   else {
     const m = { id: newMotionId(), name: nextName(motions.map((x) => x.name)), hz: RECORD_HZ, ...rec };
     motions.push(m);
-    motionsUi.note(`Saved "${m.name}".` + (why ? ' ' + why : ''));
     panel.add('ACT', `saved motion "${m.name}"`);
+    storeMotions(`Saved "${m.name}".` + (why ? ' ' + why : ''));
+    return;
   }
   showMotions();
 }

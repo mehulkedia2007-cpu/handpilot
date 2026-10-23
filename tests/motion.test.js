@@ -90,3 +90,80 @@ test('motion ids are short and repeatable with a fixed random source', () => {
   assert.equal(id, newMotionId(() => 0.5, 1700000000000));
   assert.match(id, /^m[0-9a-z]{8,}$/);
 });
+
+/* ---------- P4.2: the motion library ---------- */
+import { checkMotion, loadMotions, saveMotions, exportMotions, parseMotionFile, mergeMotions, cleanName, uniqueName, MOTIONS_KEY } from '../src/core/motion.js';
+
+function fakeStorage() {
+  const m = new Map();
+  return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => { m.set(k, String(v)); }, map: m };
+}
+const brokenStorage = { getItem() { throw new Error('SecurityError'); }, setItem() { throw new Error('QuotaExceededError'); } };
+const LIB = [
+  { id: 'm1', name: 'Reach', robot: 'arm', hz: 30, samples: MOTION.samples },
+  { id: 'm2', name: 'Wave', robot: 'humanoid', hz: 30, samples: [
+    { t: 0, joints: { rS: 0, rE: 0, lS: 0, lE: 0, head: 0, yaw: 0, bob: 0 } },
+    { t: 33, joints: { rS: 2.5, rE: 0.7, lS: 0.1, lE: 0.1, head: 0.15, yaw: -0.2, bob: 0.01 } },
+  ] },
+];
+
+test('an exported file imports back identically', () => {
+  const text = exportMotions(LIB);
+  assert.deepEqual(parseMotionFile(text), LIB);
+  // Importing it into the library it came from adds nothing.
+  const r = mergeMotions(LIB, parseMotionFile(text));
+  assert.equal(r.added, 0); assert.equal(r.skipped, 2); assert.deepEqual(r.list, LIB);
+});
+
+test('the library saves and loads, and bad storage never throws', () => {
+  const store = fakeStorage();
+  assert.deepEqual(loadMotions(store), []);
+  assert.equal(saveMotions(store, LIB), true);
+  assert.deepEqual(loadMotions(store), LIB);
+  store.map.set(MOTIONS_KEY, '{"motions":[{"name":"broken"},' + JSON.stringify(LIB[0]) + ']}');
+  assert.deepEqual(loadMotions(store), [LIB[0]], 'a broken entry is skipped, the rest kept');
+  for (const bad of ['nope', 'null', '{}', '[]']) { store.map.set(MOTIONS_KEY, bad); assert.deepEqual(loadMotions(store), [], bad); }
+  assert.deepEqual(loadMotions(brokenStorage), []);
+  assert.deepEqual(loadMotions(null), []);
+  assert.equal(saveMotions(brokenStorage, LIB), false);
+});
+
+test('an invalid file gives a clear error', () => {
+  const file = (motions, extra = {}) => JSON.stringify({ format: 'handpilot-motions', version: 1, motions, ...extra });
+  const cases = [
+    ['{not json', /not valid JSON/],
+    ['{"hello":1}', /not a HandPilot motions file/],
+    [file(LIB, { version: 2 }), /version 2/],
+    [file([]), /no motions/],
+    [file([{ ...LIB[0], robot: 'tank' }]), /Motion 1 \("Reach"\).*robot must be/],
+    [file([LIB[0], { ...LIB[1], samples: [LIB[1].samples[0]] }]), /Motion 2 \("Wave"\).*at least 2 samples/],
+    [file([{ ...LIB[0], samples: [MOTION.samples[1], MOTION.samples[0]] }]), /sample 2 is not later/],
+    [file([{ ...LIB[0], samples: [MOTION.samples[0], { t: 50, joints: { yaw: 1 } }] }]), /sample 2 has a missing or invalid "shoulder"/],
+    [file([{ ...LIB[0], samples: [MOTION.samples[0], { t: 50, joints: arm(NaN) }] }]), /invalid "yaw"/],
+    [file([{ ...LIB[0], name: '   ' }]), /no name/],
+    [file([{ ...LIB[0], id: 'has spaces!' }]), /id/],
+  ];
+  for (const [text, re] of cases) assert.throws(() => parseMotionFile(text), re, text.slice(0, 60));
+});
+
+test('checking keeps only the known fields', () => {
+  const r = checkMotion({ ...LIB[0], extra: 1, samples: LIB[0].samples.map((s) => ({ ...s, note: 'x', joints: { ...s.joints, toe: 3 } })) });
+  assert.deepEqual(r.motion, LIB[0]);
+});
+
+test('merging renames clashing names and re-ids clashing ids', () => {
+  const edited = { ...LIB[0], samples: [MOTION.samples[0], MOTION.samples[2]] };   // same id, different motion
+  const other = { ...LIB[1], id: 'm9' };                                              // new id, same name
+  const r = mergeMotions(LIB, [edited, other], () => 'mnew');
+  assert.equal(r.added, 2);
+  assert.deepEqual(r.list.slice(2).map((m) => [m.id, m.name]), [['mnew', 'Reach (2)'], ['m9', 'Wave (2)']]);
+  assert.equal(LIB.length, 2, 'the original list is not changed');
+});
+
+test('names are tidied and kept unique', () => {
+  assert.equal(cleanName('  big   wave '), 'big wave');
+  assert.equal(cleanName(42), '');
+  assert.equal(cleanName('x'.repeat(80)).length, 40);
+  assert.equal(uniqueName('Wave', ['wave', 'Wave (2)']), 'Wave (3)');
+  assert.equal(uniqueName('New', ['Wave']), 'New');
+});

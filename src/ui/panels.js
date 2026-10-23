@@ -145,3 +145,26 @@ export function createJointPanel(el, limits, pose, onChange) {
   show(pose);
   return { show, setEnabled };
 }
+
+// Save text as a file the user downloads (export). Nothing leaves the browser:
+// the "link" points at a Blob in memory.
+export function downloadText(filename, text) {
+  const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// A hidden file picker behind an Import button. onText(text, fileName) gets the file's contents.
+export function createFilePicker(button, accept, onText) {
+  const input = document.createElement('input');
+  input.type = 'file'; input.accept = accept; input.hidden = true;
+  button.after(input);
+  button.addEventListener('click', () => input.click());
+  input.addEventListener('change', async () => {
+    const f = input.files && input.files[0];
+    input.value = '';   // so picking the same file again still fires 'change'
+    if (f) onText(await f.text(), f.name);
+  });
+}
