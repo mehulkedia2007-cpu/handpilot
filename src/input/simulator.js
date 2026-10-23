@@ -1,6 +1,6 @@
 // Slider + preset input. Produces the same HandFrame shape as the camera,
 // so the rest of the app never needs to know where the hand came from.
-import { FINGERS, palmXFromYaw, lerp } from '../core/hand.js';
+import { FINGERS, palmXFromYaw, lerp, simHandLandmarks } from '../core/hand.js';
 import { DEPTH_RANGE } from '../core/workspace.js';
 
 const NAMES = { thumb: 'Thumb', index: 'Index', middle: 'Middle', ring: 'Ring', pinky: 'Pinky' };
@@ -58,12 +58,14 @@ export function createSimulator(slidersEl, presetsEl) {
   return {
     // The simulated hand is always "present".
     read(now) {
+      // y: image y grows downward, so a higher hand has a smaller y.
+      // z: reaching out means a smaller (farther) palm in the image.
+      const palm = { x: palmXFromYaw(yaw), y: 1 - height, z: lerp(DEPTH_RANGE[1], DEPTH_RANGE[0], reach) };
       return {
-        present: true, landmarks: null, world: null, handedness: null,
+        // Made-up landmarks, so the gesture trainer works without a camera too.
+        present: true, landmarks: simHandLandmarks(bends, palm), world: null, handedness: null,
         bends: { ...bends },
-        // y: image y grows downward, so a higher hand has a smaller y.
-        // z: reaching out means a smaller (farther) palm in the image.
-        palm: { x: palmXFromYaw(yaw), y: 1 - height, z: lerp(DEPTH_RANGE[1], DEPTH_RANGE[0], reach) },
+        palm,
         // Pinch 0% = thumb and index apart (about 1.2 palm widths), 100% = touching.
         pinch: lerp(1.2, 0, pinch), builtInGesture: null, builtInScore: 0, t: now,
       };

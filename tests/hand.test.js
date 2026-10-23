@@ -101,3 +101,69 @@ test('stretch spreads movement around the centre and clamps at the edges', () =>
   // With the default 1.6, the humanoid reaches its full turn about 19% in from the image edge.
   assert.ok(Math.abs(yawFromPalmX(stretch(0.1875, 1.6)) - 0.8) < 1e-12);
 });
+
+/* ---------- P4.3: normalise ---------- */
+import { normalise, simHandLandmarks } from '../src/core/hand.js';
+
+const OPEN5 = { thumb: 0, index: 0, middle: 0, ring: 0, pinky: 0 };
+const PEACE5 = { thumb: 1, index: 0, middle: 0, ring: 1, pinky: 1 };
+const handAt = (b, x = 0.5, y = 0.5, size = 0.15) => simHandLandmarks(b, { x, y, z: size });
+// Turn every point around (cx, cy) by `deg` degrees in the image plane.
+const turn = (lm, deg, cx = 0.5, cy = 0.5) => {
+  const a = deg * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+  return lm.map((p) => ({ x: cx + (p.x - cx) * c - (p.y - cy) * s, y: cy + (p.x - cx) * s + (p.y - cy) * c, z: p.z }));
+};
+const gap = (a, b) => Math.hypot(...a.map((v, i) => v - b[i]));
+
+test('normalise: 63 numbers, or 42 without z, starting at the wrist (0, 0, 0)', () => {
+  const v = normalise(handAt(OPEN5));
+  assert.equal(v.length, 63);
+  assert.deepEqual(v.slice(0, 3).map((n) => Math.abs(n)), [0, 0, 0]);
+  assert.equal(normalise(handAt(OPEN5), { dropZ: true }).length, 42);
+});
+
+test('normalise: the same shape at a different size and place gives the same vector', () => {
+  const a = normalise(handAt(PEACE5, 0.3, 0.4, 0.08));
+  const b = normalise(handAt(PEACE5, 0.7, 0.6, 0.28));
+  assert.ok(gap(a, b) < 1e-9, `gap ${gap(a, b)}`);
+});
+
+test('normalise: the wrist-to-middle-knuckle length is 1', () => {
+  const v = normalise(handAt(OPEN5, 0.2, 0.8, 0.25));
+  assert.ok(Math.abs(Math.hypot(v[27], v[28], v[29]) - 1) < 1e-9);   // point 9 is numbers 27..29
+});
+
+test('normalise with rotate: a tilted hand matches the upright one', () => {
+  const up = handAt(PEACE5);
+  const tilted = turn(up, 35);
+  assert.ok(gap(normalise(up), normalise(tilted)) > 0.5, 'without rotate, tilt matters');
+  assert.ok(gap(normalise(up, { rotate: true }), normalise(tilted, { rotate: true })) < 1e-9);
+  // After rotating, point 9 points straight up: (0, -1).
+  const r = normalise(tilted, { rotate: true });
+  assert.ok(Math.abs(r[27]) < 1e-9 && Math.abs(r[28] + 1) < 1e-9);
+});
+
+test('normalise with mirror: a left hand matches the mirrored right hand', () => {
+  const right = handAt(PEACE5);
+  const left = right.map((p) => ({ ...p, x: 1 - p.x }));
+  assert.ok(gap(normalise(right), normalise(left, { mirror: true })) < 1e-9);
+});
+
+test('normalise: different shapes stay far apart', () => {
+  const d = gap(normalise(handAt(OPEN5)), normalise(handAt(PEACE5)));
+  assert.ok(d > 0.5, `open vs peace ${d}`);
+});
+
+test('normalise: bad input gives null instead of NaNs', () => {
+  assert.equal(normalise(null), null);
+  assert.equal(normalise([{ x: 0, y: 0, z: 0 }]), null);
+  assert.equal(normalise(Array.from({ length: 21 }, () => ({ x: 0.5, y: 0.5, z: 0 }))), null);
+});
+
+test('the simulator hand has 21 finite points with point 9 on the palm', () => {
+  const lm = handAt({ thumb: 0.5, index: 0.8, middle: 0.8, ring: 0.8, pinky: 0.8 }, 0.4, 0.6, 0.2);
+  assert.equal(lm.length, 21);
+  assert.ok(lm.every((p) => [p.x, p.y, p.z].every(Number.isFinite)));
+  assert.ok(Math.abs(lm[9].x - 0.4) < 1e-9 && Math.abs(lm[9].y - 0.6) < 1e-9);
+  assert.ok(Math.abs(Math.hypot(lm[5].x - lm[17].x, lm[5].y - lm[17].y) - 0.2) < 1e-9, 'palm width matches palm.z');
+});
