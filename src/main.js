@@ -22,6 +22,7 @@ import { createChannels, createAgentPanel, buildGestureGuide, createRobotSwitch,
 import { createMotionsPanel } from './ui/motions.js';
 import { loadTraining, saveTraining, exportTraining, parseTrainingFile, mergeTraining, addSamples, buildKnn,
   customCommands, createSampler, vectorFor, TRAINED } from './core/training.js';
+import { evaluate } from './core/knn.js';
 import { createTrainerPanel } from './ui/trainer.js';
 
 const $ = (id) => document.getElementById(id);
@@ -364,9 +365,11 @@ let knn = buildKnn(training);
 let seen = null;            // the latest prediction, for the read-out
 const sampler = createSampler();
 let samplingName = null, lastSampling = null;
+let accuracySeed = 0;
 const trainer = createTrainerPanel({
   name: $('trName'), rec: $('btnTrRec'), status: $('trStatus'), seen: $('trSeen'), list: $('trList'),
   distance: $('trDistance'), distanceOut: $('trDistanceOut'), exportBtn: $('btnTrExport'), importBtn: $('btnTrImport'), note: $('trNote'),
+  accBtn: $('btnTrAcc'), report: $('trReport'),
 }, {
   record(typed) {
     const name = cleanName(typed);
@@ -400,6 +403,13 @@ const trainer = createTrainerPanel({
     downloadText('handpilot-gestures.json', exportTraining(training));
     trainer.note(`Exported ${training.gestures.length} gesture${training.gestures.length === 1 ? '' : 's'} to handpilot-gestures.json.`);
   },
+  checkAccuracy() {
+    // A new seed each time, so pressing again tests on a different 20%.
+    const examples = training.gestures.flatMap((g) => g.samples.map((vector) => ({ vector, label: g.name })));
+    const r = evaluate(examples, { maxDistance: training.maxDistance }, { seed: ++accuracySeed });
+    trainer.showReport(r);
+    panel.add('ACT', `accuracy check: ${r.overall.correct} of ${r.overall.total} held-out samples right`);
+  },
   importText(text) {
     try {
       const r = mergeTraining(training, parseTrainingFile(text));
@@ -415,6 +425,7 @@ function storeTraining(msg) {
   const ok = saveTraining(storage, training);
   trainer.note(msg + (ok ? '' : ' (This browser would not save it, so it lasts until you reload. Export to keep a copy.)'));
   knn = buildKnn(training);
+  trainer.showReport(null);   // the data changed, so an old report would be wrong
   refreshTrainer();
 }
 function refreshTrainer() {

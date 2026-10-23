@@ -173,9 +173,11 @@
           <div class="srow"><label for="trDistance">Match distance</label><input id="trDistance" type="range" step="0.05" value="0.6"><output id="trDistanceOut">0.60</output></div>
         </div>
         <div class="row">
+          <button class="btn" id="btnTrAcc" type="button">Check accuracy</button>
           <button class="btn" id="btnTrExport" type="button">Export</button>
           <button class="btn" id="btnTrImport" type="button">Import</button>
         </div>
+        <div class="acc" id="trReport" hidden></div>
         <p class="note" id="trNote" aria-live="polite">A trained gesture you hold for about a second runs its action, and it wins over the built-in gestures when the classifier is confident. Lower the match distance if it fires on hands you didn't teach; raise it if it misses yours. Training data is saved in this browser.</p>
       </section>
     </section>

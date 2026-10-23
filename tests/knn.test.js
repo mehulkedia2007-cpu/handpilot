@@ -80,3 +80,55 @@ test('an empty classifier, or no vector, gives "unknown"', () => {
   knn.clear();
   assert.equal(knn.size, 0);
 });
+
+/* ---------- P4.5: hold-out split and accuracy ---------- */
+import { holdoutSplit, accuracyReport, evaluate, seededRandom } from '../src/core/knn.js';
+
+const labelled = (label, n) => Array.from({ length: n }, (_, i) => ({ vector: [i], label, id: label + i }));
+
+test('the split is 80/20 per gesture, with nothing in both halves', () => {
+  const all = [...labelled('a', 30), ...labelled('b', 10), ...labelled('c', 3)];
+  const { train, test: held } = holdoutSplit(all, { seed: 4 });
+  const count = (list, l) => list.filter((e) => e.label === l).length;
+  assert.deepEqual(['a', 'b', 'c'].map((l) => count(held, l)), [6, 2, 1]);
+  assert.deepEqual(['a', 'b', 'c'].map((l) => count(train, l)), [24, 8, 2]);
+  const ids = new Set(train.map((e) => e.id));
+  assert.ok(held.every((e) => !ids.has(e.id)), 'no example is in both');
+  assert.equal(train.length + held.length, all.length);
+});
+
+test('the split is repeatable with a seed and shuffled', () => {
+  const all = labelled('a', 50);
+  const a = holdoutSplit(all, { seed: 9 }).test.map((e) => e.id);
+  assert.deepEqual(holdoutSplit(all, { seed: 9 }).test.map((e) => e.id), a);
+  assert.notDeepEqual(holdoutSplit(all, { seed: 10 }).test.map((e) => e.id), a);
+  assert.notDeepEqual(a, all.slice(0, 10).map((e) => e.id), 'not just the first 10');
+});
+
+test('a gesture with one example is only trained on', () => {
+  const { train, test: held } = holdoutSplit(labelled('solo', 1));
+  assert.equal(train.length, 1); assert.equal(held.length, 0);
+});
+
+test('accuracy maths: per gesture, overall and the confusion table', () => {
+  const pairs = [
+    { actual: 'a', predicted: 'a' }, { actual: 'a', predicted: 'a' }, { actual: 'a', predicted: 'b' }, { actual: 'a', predicted: 'unknown' },
+    { actual: 'b', predicted: 'b' }, { actual: 'b', predicted: 'b' },
+  ];
+  const r = accuracyReport(pairs, ['a', 'b', 'c']);
+  assert.deepEqual(r.columns, ['a', 'b', 'c', 'unknown']);
+  assert.deepEqual(r.confusion, [[2, 1, 0, 1], [0, 2, 0, 0], [0, 0, 0, 0]]);
+  assert.deepEqual(r.perLabel.map((p) => [p.label, p.correct, p.total, p.accuracy]), [['a', 2, 4, 0.5], ['b', 2, 2, 1], ['c', 0, 0, null]]);
+  assert.deepEqual(r.overall, { correct: 4, total: 6, accuracy: 4 / 6 });
+  assert.equal(accuracyReport([], ['a']).overall.accuracy, null);
+});
+
+test('evaluate: well-separated clusters score 100%, overlapping ones less', () => {
+  const rand = seededRandom(5);
+  const blob = (label, c, n, spread) => Array.from({ length: n }, () => ({ vector: c.map((x) => x + (rand() * 2 - 1) * spread), label }));
+  const apart = evaluate([...blob('a', [0, 0], 30, 0.3), ...blob('b', [3, 3], 30, 0.3)], { maxDistance: 5 });
+  assert.equal(apart.testSize, 12); assert.equal(apart.trainSize, 48);
+  assert.equal(apart.overall.accuracy, 1);
+  const mixed = evaluate([...blob('a', [0, 0], 40, 1), ...blob('b', [0.3, 0], 40, 1)], { maxDistance: 5 });
+  assert.ok(mixed.overall.accuracy < 0.9, `overlap gives ${mixed.overall.accuracy}`);
+});

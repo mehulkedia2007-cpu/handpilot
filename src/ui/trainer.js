@@ -16,8 +16,8 @@ function actionFrom(value) {
   return null;
 }
 
-// els: { name, rec, status, seen, list, distance, distanceOut, exportBtn, importBtn, note }.
-// on: { record(name), cancel(), setAction(name, action), remove(name), setDistance(v), exportAll(), importText(text) }.
+// els: { name, rec, status, seen, list, distance, distanceOut, exportBtn, importBtn, note, accBtn, report }.
+// on: { record(name), cancel(), setAction(name, action), remove(name), setDistance(v), exportAll(), importText(text), checkAccuracy() }.
 export function createTrainerPanel(els, on) {
   let sampling = false;
   els.name.maxLength = NAME_MAX;
@@ -27,6 +27,7 @@ export function createTrainerPanel(els, on) {
   els.distance.addEventListener('input', () => { els.distanceOut.textContent = Number(els.distance.value).toFixed(2); });
   els.distance.addEventListener('change', () => on.setDistance(Number(els.distance.value)));
   els.exportBtn.addEventListener('click', () => on.exportAll());
+  els.accBtn.addEventListener('click', () => on.checkAccuracy());
   createFilePicker(els.importBtn, '.json,application/json', (text) => on.importText(text));
 
   function actionSelect(g, motions) {
@@ -52,6 +53,7 @@ export function createTrainerPanel(els, on) {
     els.distance.value = data.maxDistance;
     els.distanceOut.textContent = data.maxDistance.toFixed(2);
     els.exportBtn.disabled = !data.gestures.length;
+    els.accBtn.disabled = !data.gestures.some((g) => g.samples.length >= 2);
     els.list.textContent = '';
     if (!data.gestures.length) {
       const li = document.createElement('li'); li.className = 'empty';
@@ -104,6 +106,31 @@ export function createTrainerPanel(els, on) {
       else els.seen.textContent = `Sees: nothing it was taught (closest: ${p.best}, distance ${p.distance.toFixed(2)})`;
     },
     status(text) { els.status.textContent = text; },
+    // The hold-out report from core/knn.js evaluate(), or null to hide it.
+    showReport(r) {
+      els.report.hidden = !r;
+      els.report.textContent = '';
+      if (!r) return;
+      const pct = (a) => (a === null ? '–' : Math.round(a * 100) + '%');
+      const head = document.createElement('p');
+      head.textContent = `Overall ${pct(r.overall.accuracy)} (${r.overall.correct} of ${r.overall.total} right). `
+        + `Trained on ${r.trainSize} samples, tested on ${r.testSize} it never saw (20% of each gesture). Rows: what you showed. Columns: what it answered.`;
+      const table = document.createElement('table');
+      const cell = (tag, text, cls) => { const c = document.createElement(tag); c.textContent = text; if (cls) c.className = cls; return c; };
+      const top = document.createElement('tr');
+      top.append(cell('th', ''), ...r.columns.map((c) => { const th = cell('th', c); th.scope = 'col'; return th; }), cell('th', 'accuracy'));
+      table.appendChild(top);
+      r.labels.forEach((label, i) => {
+        const tr = document.createElement('tr');
+        const th = cell('th', label); th.scope = 'row';
+        tr.append(th, ...r.confusion[i].map((n, j) => cell('td', String(n), n === 0 ? 'zero' : i === j ? 'hit' : 'miss')),
+          cell('td', pct(r.perLabel[i].accuracy)));
+        table.appendChild(tr);
+      });
+      const scroll = document.createElement('div'); scroll.className = 'acc-scroll';
+      scroll.appendChild(table);
+      els.report.append(head, scroll);
+    },
     note(text) { els.note.textContent = text; },
     clearName() { els.name.value = ''; },
   };
