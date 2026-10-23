@@ -8,6 +8,7 @@
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { startFakeAgent } from './fake-agent.mjs';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const PORT = 5199;
@@ -22,6 +23,9 @@ for (let i = 0; i < 50; i++) {
   try { if ((await fetch(URL_)).ok) break; } catch (_) { /* not up yet */ }
   await new Promise((r) => setTimeout(r, 100));
 }
+// The language agent talks to a fake agent server (scripted model, no API key).
+const AGENT_PORT = 5198, NO_AGENT_PORT = 5197;
+const fakeAgent = await startFakeAgent(AGENT_PORT);
 const results = [];
 const check = (name, ok, info = '') => { results.push({ name, ok: !!ok, info }); console.log((ok ? 'PASS ' : 'FAIL ') + name + (info ? '  [' + info + ']' : '')); };
 // Waits are generous: the hold-to-command gestures need ~0.9 s and the arm eases into place.
@@ -60,7 +64,9 @@ async function fresh() {
   await page.reload(); await page.waitForSelector('#stage canvas'); await sleep(1200);
 }
 
-await page.goto(URL_); await page.waitForSelector('#stage canvas'); await fresh();
+const agentRequests = [];
+page.on('request', (r) => { if (r.url().startsWith(`http://localhost:${AGENT_PORT}/`)) agentRequests.push(r.url()); });
+await page.goto(URL_ + `?agent=http://localhost:${AGENT_PORT}`); await page.waitForSelector('#stage canvas'); await fresh();
 
 /* ---------- simulator (humanoid) ---------- */
 check('page loads with no console errors', errors.length === 0, errors.join(' | '));
@@ -290,6 +296,60 @@ check('deleting a motion clears the gesture that played it', await page.$eval('s
 await page.setInputFiles('#btnTrImport + input', { name: 'bad.json', mimeType: 'application/json', buffer: Buffer.from('{"format":"handpilot-gestures","version":1,"gestures":[{"name":"x","samples":[[1,2]]}]}') }); await sleep(300);
 check('a bad gestures file gives a clear error', /sample 1 is not a list of 63 numbers/.test(await text('trNote')), await text('trNote'));
 
+/* ---------- language agent (Phase 5) ---------- */
+check('the agent server is not contacted until you use the box', agentRequests.length === 0 && (await text('llmState')) === 'Not connected', agentRequests.join(' '));
+// Wait for the agent to finish a command: Send is enabled again.
+async function askAgent(cmd, maxMs = 30000) {
+  await page.fill('#askInput', cmd);
+  await page.press('#askInput', 'Enter');   // Enter submits, so it works from the keyboard
+  await sleep(300);
+  for (let t = 0; t < maxMs; t += 250) { if (!(await page.$eval('#btnAsk', (b) => b.disabled))) break; await sleep(250); }
+  await sleep(300);   // the badge and the log redraw about every 70 ms
+  return text('askReply');
+}
+await robot('Humanoid'); await sleep(300);
+await page.focus('#askInput'); await sleep(600);
+check('focusing the box finds the agent server: Online', (await text('llmState')) === 'Online', await text('llmState'));
+await page.fill('#askInput', 'pick up the red block');
+await page.press('#askInput', 'Enter');
+await sleep(1200);
+check('a command switches to the arm and to LLM mode', (await page.$eval('#robotSwitch button[aria-pressed="true"]', (b) => b.textContent)) === 'Arm' && (await mode()) === 'LLM', await mode());
+check('Stop is enabled and Send disabled while it works', await page.$eval('#btnAgentStop', (b) => !b.disabled) && await page.$eval('#btnAsk', (b) => b.disabled));
+let reply = await askAgent('');
+check('"pick up the red block": the arm holds the red block', /grab the red block/.test(await log()) && /holding the red block/.test(reply), reply);
+check('finishing while holding a block goes to HOLD, not MANUAL', (await mode()) === 'HOLD', await mode());
+check('the log shows SEE, the tool calls (ACT) and the reply (DECIDE)', /SEE command "pick up the red block"/.test(await log()) && /ACT move_gripper_to\(x=-1, y=1\.1, z=1\.6\)/.test(await log()) && /DECIDE agent says: I'm holding/.test(await log()));
+await page.click('#btnChReset'); await preset('Open palm'); await sleep(1600);
+reply = await askAgent('stack red on blue');
+check('"stack red on blue": red ends up on blue', /drop the red block on the blue block/.test(await log()) && /Stacked the red block on the blue block/.test(reply), reply);
+check('then control returns to MANUAL', (await mode()) === 'MANUAL', await mode());
+reply = await askAgent('do something bad');
+check('unknown tools and malformed arguments are rejected in the log', /rejected launch_rocket: unknown tool/.test(await log()) && /rejected move_gripper_to: x must be a number/.test(await log()));
+check('out-of-range numbers are clamped, and the log says so', /x 9 clamped to 2/.test(await log()));
+await page.fill('#askInput', 'wander about'); await page.press('#askInput', 'Enter'); await sleep(2500);
+await page.click('#btnAgentStop'); await sleep(400);
+check('Stop halts the agent and switches to HOLD', (await mode()) === 'HOLD' && (await text('askReply')) === 'Stopped.' && /Stop pressed, stop the language agent/.test(await log()));
+const atStop = (await log()).split('\n')[0];
+await sleep(2500);
+check('nothing moves after Stop (no new log entries)', (await log()).split('\n')[0] === atStop, atStop);
+await preset('Open palm'); await sleep(1600);
+await page.fill('#askInput', 'wander about'); await page.press('#askInput', 'Enter'); await sleep(1500);
+await preset('Fist'); await sleep(1800);
+check('holding a command gesture takes over from the agent', (await mode()) === 'HOLD' && /a command gesture took over/.test(await log()));
+await preset('Open palm'); await sleep(1600);
+
+// With no server: a clear offline state, and the rest of the app still works.
+const p3 = await ctx.newPage();
+await p3.goto(URL_ + `?agent=http://localhost:${NO_AGENT_PORT}`); await p3.waitForSelector('#stage canvas'); await sleep(800);
+await p3.focus('#askInput'); await sleep(1200);
+const offNote = await p3.evaluate(() => document.getElementById('askNote').textContent);
+check('no server: "Agent offline" with how to start it', (await p3.evaluate(() => document.getElementById('llmState').textContent)) === 'Agent offline' && /npm run dev/.test(offNote), offNote.slice(0, 80));
+await p3.fill('#askInput', 'pick up the red block'); await p3.press('#askInput', 'Enter'); await sleep(1500);
+check('no server: sending says so, and the robot is back in MANUAL', /Agent offline/.test(await p3.evaluate(() => document.getElementById('askReply').textContent)) && (await p3.evaluate(() => document.getElementById('modeName').textContent)) === 'MANUAL');
+await p3.evaluate(() => [...document.querySelectorAll('#presets button')].find((b) => b.textContent === 'Fist').click()); await sleep(1600);
+check('no server: gestures still work', (await p3.evaluate(() => document.getElementById('modeName').textContent)) === 'HOLD');
+await p3.close();
+
 /* ---------- camera (fake device, no hand) ---------- */
 await page.click('#btnCam');
 let camState = '';
@@ -321,6 +381,7 @@ await p2.goto(URL_); await p2.waitForSelector('#stage canvas'); await sleep(1200
 check('works when localStorage is blocked', err2.length === 0 && (await p2.evaluate(() => document.getElementById('modeName').textContent)) === 'MANUAL', err2.join(' | '));
 
 await browser.close();
+fakeAgent.close();
 const failed = results.filter((r) => !r.ok);
 console.log(`\n${results.length - failed.length}/${results.length} passed`);
 process.exit(failed.length ? 1 : 0);

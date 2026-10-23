@@ -130,6 +130,16 @@
 
       <section class="panel" aria-label="Agent">
         <div class="ph"><span class="k">Agent</span><span class="chip" id="agentMode">MANUAL</span></div>
+        <form class="ask" id="askForm" autocomplete="off">
+          <div class="ph"><label class="k" for="askInput">Ask the arm</label><span class="chip" id="llmState">Not connected</span></div>
+          <div class="row ask-row">
+            <input type="text" id="askInput" maxlength="500" placeholder="e.g. stack red on blue">
+            <button class="btn primary" id="btnAsk" type="submit">Send</button>
+            <button class="btn rec" id="btnAgentStop" type="button" disabled>Stop</button>
+          </div>
+          <p class="ask-reply" id="askReply" aria-live="polite" hidden></p>
+          <p class="note" id="askNote" aria-live="polite">A language model turns your command into tool calls that move the arm, inside the same safe box your hand uses. It needs the local agent server (see the README). Only the text you type and the block positions are sent, never video. Stop, or holding any command gesture, halts it.</p>
+        </form>
         <div class="pipe">
           <div><span class="tag SEE">SEE</span><span id="pSee">simulator input</span></div>
           <div><span class="tag DECIDE">DECIDE</span><span id="pDecide">mode MANUAL</span></div>

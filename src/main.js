@@ -24,6 +24,10 @@ import { loadTraining, saveTraining, exportTraining, parseTrainingFile, mergeTra
   customCommands, createSampler, vectorFor, TRAINED } from './core/training.js';
 import { evaluate } from './core/knn.js';
 import { createTrainerPanel } from './ui/trainer.js';
+import { checkToolCall, describeCall } from './core/tools.js';
+import { createLlmArm, describeScene } from './core/llmArm.js';
+import { createLlmClient, agentUrlFrom, OfflineError } from './agent-llm/client.js';
+import { createCommandPanel } from './ui/command.js';
 
 const $ = (id) => document.getElementById(id);
 const t0 = performance.now();
@@ -444,6 +448,169 @@ function finishSampling(r) {
   storeTraining(`"${name}" has ${training.gestures.find((g) => g.name === name).samples.length} samples.`);
 }
 
+/* ---------- language agent (Phase 5) ---------- */
+// Type a command; the server asks a language model, which answers with tool calls.
+// The page checks each call again (core/tools.js), runs it on the arm over time
+// (core/llmArm.js), and sends back the result with the new scene, until the model
+// replies in words. Stop, or any command gesture, halts it at once.
+const llmClient = createLlmClient(agentUrlFrom(location.search));
+const llmArm = createLlmArm();
+let run = null;   // { id, abort, commands, tick } while a command runs
+const ask = createCommandPanel({
+  form: $('askForm'), input: $('askInput'), send: $('btnAsk'), stop: $('btnAgentStop'),
+  state: $('llmState'), reply: $('askReply'), note: $('askNote'),
+}, {
+  send: (text) => runLlm(text),
+  stop: () => stopLlm('Stop pressed', true),
+});
+const OFFLINE_NOTE = 'Agent offline. The rest of the app works without it. To use it, start the agent server: cd server, npm install, npm run dev (see the README).';
+// The server is only asked when you use the box, not on page load: a request to a
+// server that isn't running shows up as an error in the console, and on the live
+// site the browser may ask for permission to reach this computer.
+let lastCheck = -Infinity;
+async function checkAgent() {
+  if (ask.busy || performance.now() - lastCheck < 5000) return;
+  lastCheck = performance.now();
+  ask.setServer('checking');
+  try {
+    const h = await llmClient.health();
+    if (h.ready) ask.setServer('online', `Agent online (${h.model}). Try "pick up the red block" or "stack red on blue". Only the text you type and the block positions are sent, never video.`);
+    else ask.setServer('setup', 'The agent server is running but not set up: ' + h.problems.join(' '));
+  } catch (_) {
+    ask.setServer('offline', OFFLINE_NOTE);
+  }
+}
+$('askInput').addEventListener('focus', checkAgent);
+
+const armTip = () => forwardKinematics(armCur);
+function sceneNow() {
+  return describeScene({
+    robot: settings.robot, mode: agent.mode, tip: armTip(), grip: armCur.grip,
+    held: stacker.held, blocks: stacker.blocks, motions: motions.map((m) => m.name),
+  });
+}
+
+// Resolves on the first frame that check(now) returns something.
+function waitFrames(check) {
+  return new Promise((resolve) => {
+    run.tick = (now) => {
+      const r = check(now);
+      if (r) { run.tick = null; resolve(r); }
+    };
+    run.cancelWait = () => { run.tick = null; resolve({ stopped: true }); };
+  });
+}
+
+// Run one checked tool call. Returns { ok, content } for the model.
+async function runTool(call) {
+  const now = performance.now();
+  if (call.name === 'get_scene') return { ok: true, content: sceneNow() };
+  if (call.name === 'set_mode') {
+    agent.llmSetMode(now, call.args.mode);
+    return { ok: true, content: { mode: agent.mode } };
+  }
+  if (call.name === 'play_motion') {
+    const want = call.args.name.toLowerCase();
+    const m = motions.find((x) => x.name.toLowerCase() === want);
+    if (!m) return { ok: false, content: `No motion called "${call.args.name}". Saved motions: ${motions.map((x) => x.name).join(', ') || 'none'}.` };
+    playMotion(m.id);
+    const r = await waitFrames(() => (agent.mode !== 'REPLAY' || !agent.replay || agent.replay.id !== m.id) && { done: true });
+    return r.stopped ? { ok: false, content: 'Stopped.' } : { ok: true, content: { played: m.name } };
+  }
+  // Arm tools: make sure the arm is on screen and the agent is driving it.
+  if (settings.robot !== 'arm') selectRobot('arm');
+  if (jointDebug) $('jointDebug').click();   // the debug sliders would hold the joints
+  if (agent.mode !== 'LLM') {
+    llmArm.sync({ tip: armTip(), grip: armCur.grip });
+    agent.startLlm(now, 'the language agent takes the arm');
+  }
+  llmArm.begin(now, call, { tip: armTip(), grip: armCur.grip });
+  const r = await waitFrames((t) => llmArm.step(t, { tip: armTip(), grip: armCur.grip }));
+  if (r.stopped) return { ok: false, content: 'Stopped.' };
+  const scene = sceneNow();
+  if (call.name === 'move_gripper_to') return { ok: true, content: { arrived: r.arrived, ...(r.arrived ? {} : { note: 'The arm could not reach that point exactly.' }), scene } };
+  if (call.name === 'close_gripper') return { ok: true, content: { grabbed: stacker.held || 'nothing within reach', scene } };
+  return { ok: true, content: { scene } };
+}
+
+async function runLlm(text) {
+  if (run) return;
+  if (recorder.recording) stopRecording();
+  run = { id: null, abort: new AbortController(), commands: agent.commands, tick: null, cancelWait: null, stopped: false };
+  const me = run;
+  ask.setBusy(true); ask.reply('');
+  // The arm holds still while the model thinks, so the scene it reads stays true.
+  llmArm.sync({ tip: armTip(), grip: armCur.grip });
+  agent.startLlm(performance.now(), `command "${text}"`);
+  panel.add('SEE', `command "${text}", sending the scene`);
+  try {
+    let res = await llmClient.start(text, sceneNow(), me.abort.signal);
+    ask.setServer('online');
+    for (;;) {
+      if (me.stopped) return;
+      me.id = res.id;
+      for (const r of res.rejected || []) panel.add('DECIDE', `rejected ${r.name}: ${r.error}`);
+      if (res.status === 'done') {
+        panel.add('DECIDE', 'agent says: ' + res.reply);
+        ask.reply(res.reply, !!(res.limited || res.refused));
+        ask.clear();
+        return;
+      }
+      if (res.text) panel.add('DECIDE', 'agent says: ' + res.text);
+      const results = [];
+      for (const c of res.calls) {
+        if (me.stopped) break;
+        // Checked again here: the page never trusts the server's word for it.
+        const chk = checkToolCall({ name: c.name, input: c.args });
+        if (!chk.ok) { panel.add('DECIDE', `rejected ${c.name}: ${chk.error}`); results.push({ id: c.id, ok: false, content: 'Rejected: ' + chk.error }); continue; }
+        panel.add('ACT', describeCall(chk) + (c.notes && c.notes.length ? ` (${c.notes.join('; ')})` : ''));
+        const out = await runTool(chk);
+        results.push({ id: c.id, ...out });
+      }
+      if (me.stopped) return;
+      panel.add('SEE', `${results.length} tool result${results.length === 1 ? '' : 's'} back to the model`);
+      res = await llmClient.next(me.id, results, me.abort.signal);
+    }
+  } catch (e) {
+    if (me.stopped) return;
+    if (e instanceof OfflineError) ask.setServer('offline', OFFLINE_NOTE);
+    panel.add('DECIDE', 'agent error: ' + e.message);
+    ask.reply(e.message, true);
+  } finally {
+    if (run === me) finishLlm('language agent finished');
+  }
+}
+
+// Leave LLM mode. If a block is still held, HOLD keeps it up instead of MANUAL.
+function finishLlm(why) {
+  llmArm.cancel();
+  run = null;
+  if (agent.mode === 'LLM') {
+    const next = stacker.held && settings.robot === 'arm' ? 'HOLD' : 'MANUAL';
+    if (next === 'MANUAL') pinch.reset();   // start open, rather than with a pinch from before
+    agent.endLlm(performance.now(), why, next);
+  }
+  ask.setBusy(false);
+}
+
+// Stop: cancel the request, the arm's job, and the server's session.
+// hold: also freeze the robot (the Stop button). A gesture already chose a mode.
+function stopLlm(why, hold) {
+  const me = run;
+  if (!me) return;
+  me.stopped = true;
+  me.abort.abort();
+  if (me.cancelWait) me.cancelWait();
+  if (me.id) llmClient.stop(me.id);
+  llmArm.cancel();
+  run = null;
+  panel.add('DECIDE', `${why}, stop the language agent`);
+  if (hold) agent.llmSetMode(performance.now(), 'HOLD');
+  else if (agent.mode === 'LLM') agent.endLlm(performance.now(), why);
+  ask.reply('Stopped.');
+  ask.setBusy(false);
+}
+
 showRobot();
 showMotions();
 refreshTrainer();
@@ -469,6 +636,8 @@ function frame() {
   }
   // While the trainer records, hand shapes are examples, not commands.
   const st = agent.step(now, { hand, gesture: sampler.active ? 'NONE' : g });
+  // A command gesture that fired while the language agent works takes over from it.
+  if (run && agent.commands !== run.commands) stopLlm('a command gesture took over', false);
   if (st.mode !== 'REPLAY') replay = null;
   const replayed = st.mode === 'REPLAY' ? replayPose(now) : null;
   if (st.mode !== lastMode) { lastMode = st.mode; showMotions(); }   // Play turns into Stop and back
@@ -494,7 +663,7 @@ function frame() {
       // Seconds since the mode began, so the AUTO demo always starts from the top.
       const goal = replayed && settings.robot === 'arm'
         ? { pose: clampArmPose(replayed), target: null, reachable: true }
-        : armGoalFor(st.mode, (now - agent.modeSince) / 1000, manual);
+        : armGoalFor(st.mode, (now - agent.modeSince) / 1000, manual, { target: llmArm.target, grip: llmArm.grip });
       // The grip eases toward its goal like the joints do, which animates the fingers.
       if (goal) blendPose(armCur, goal.pose, st.mode === 'REPLAY' && following ? FOLLOW_ALPHA : POSE_ALPHA);
       arm.showTarget(goal && goal.target, goal ? goal.reachable : true);
@@ -508,6 +677,8 @@ function frame() {
     }
     arm.apply(armCur, stacker.held ? BLOCK_SIZE : 0);
   }
+  // The language agent's current tool waits for the arm (or a replay) to finish.
+  if (run && run.tick) run.tick(now);
   // Record what is on screen, after this frame's easing, so a replay looks the same.
   if (recorder.recording && !recorder.sample(now, settings.robot === 'arm' ? armCur : cur))
     stopRecording(`Recording stops after ${MAX_RECORD_MS / 1000} s.`);

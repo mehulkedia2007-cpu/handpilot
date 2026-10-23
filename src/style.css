@@ -68,6 +68,7 @@ h1{font:700 32px/1 var(--font-display);letter-spacing:.05em;text-transform:upper
 [data-mode="IDLE"]{--mode:var(--muted)}
 [data-mode="GREET"]{--mode:var(--accent)}
 [data-mode="REPLAY"]{--mode:#6fb7ff}
+[data-mode="LLM"]{--mode:#ff8fd0}
 .ring{width:44px;height:44px;transform:rotate(-90deg)}
 .ring circle{fill:none;stroke-width:4}
 .ring-bg{stroke:var(--line)}
@@ -123,6 +124,12 @@ input[type=range]{width:100%;accent-color:var(--accent);margin:0}
 .m-rename{display:flex;flex-wrap:wrap;gap:6px;width:100%}
 .m-rename .btn{min-height:32px;padding:0 10px}
 .tr-rec input{flex:1 1 180px}
+.ask{margin:0 0 14px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.ask-row{margin-top:8px}
+.ask-row input{flex:1 1 180px}
+.btn:disabled{opacity:.45;cursor:default}
+.ask-reply{margin:10px 0 0;padding:8px 10px;border-left:3px solid var(--mode,#ff8fd0);background:var(--panel-2);border-radius:0 4px 4px 0;font-size:14px;overflow-wrap:anywhere}
+.ask-reply.err{border-left-color:var(--bad)}
 .tr-status{margin:10px 0 0;font-size:13px}
 .tr-seen{margin:6px 0 0;font:500 12px/1.4 var(--font-mono);color:var(--muted);min-height:1.4em}
 .tr-dist{margin-top:12px;grid-template-columns:minmax(0,1fr)}

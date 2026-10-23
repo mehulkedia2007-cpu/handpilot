@@ -5,7 +5,7 @@ import { gestureLabel } from '../core/gestures.js';
 const NAMES = { thumb: 'Thumb', index: 'Index', middle: 'Middle', ring: 'Ring', pinky: 'Pinky' };
 const DRIVES = { thumb: 'drives head nod', index: 'drives right shoulder', middle: 'drives right elbow', ring: 'drives left shoulder', pinky: 'drives left elbow' };
 const ARM_DRIVES = { thumb: 'pinch with index to grab', index: 'pinch with thumb to grab', middle: 'used for commands', ring: 'used for commands', pinky: 'used for commands' };
-const ACT_TEXT = { MANUAL: 'copy finger bends to joints', HOLD: 'hold every joint still', AUTO: 'run the dance routine', IDLE: 'ease to neutral pose', GREET: 'wave the right arm', REPLAY: 'play back a saved motion' };
+const ACT_TEXT = { MANUAL: 'copy finger bends to joints', HOLD: 'hold every joint still', AUTO: 'run the dance routine', IDLE: 'ease to neutral pose', GREET: 'wave the right arm', REPLAY: 'play back a saved motion', LLM: 'carry out the language agent\'s tool calls' };
 const GUIDE = [
   ['Open palm', [0, 0, 0, 0, 0], 'MANUAL. The robot mirrors your fingers.'],
   ['Fist', [1, 1, 1, 1, 1], 'HOLD. Freezes the robot where it is.'],
@@ -47,7 +47,7 @@ export function createAgentPanel(els, t0) {
 
   function add(tag, text) {
     items.unshift({ t: performance.now() - t0, tag, text });
-    if (items.length > 40) items.pop();
+    if (items.length > 60) items.pop();
     dirty = true;
   }
 
@@ -59,7 +59,7 @@ export function createAgentPanel(els, t0) {
     if (!dirty) return;
     dirty = false;
     els.log.textContent = '';
-    for (const it of items.slice(0, 30)) {
+    for (const it of items.slice(0, 50)) {
       const li = document.createElement('li'), tm = document.createElement('time');
       const tg = document.createElement('span'), tx = document.createElement('span');
       tm.textContent = fmt(it.t); tg.className = 'tag ' + it.tag; tg.textContent = it.tag; tx.textContent = it.text;

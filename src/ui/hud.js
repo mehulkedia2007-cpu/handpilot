@@ -8,6 +8,7 @@ export const MODE_DESC = {
   IDLE: 'Waiting for a hand. Robot at neutral pose',
   GREET: 'Waving hello',
   REPLAY: 'Playing a saved motion. Hold any command gesture to stop',
+  LLM: 'The language agent is driving. Hold a fist or press Stop to take over',
 };
 
 // Circumference of the ring (2 * PI * r, r = 18). Shrinking the dash offset from
