@@ -7,7 +7,7 @@ One frame of hand input. Both `input/camera.js` and `input/simulator.js` produce
 ```js
 HandFrame = {
   present: boolean,                 // is a hand in view? (the simulator is always true)
-  landmarks: [{x,y,z}] | null,      // 21 image-space points, 0–1 (camera only)
+  landmarks: [{x,y,z}] | null,      // 21 image-space points, 0–1 (the simulator makes up a hand from its sliders)
   world: [{x,y,z}] | null,          // 21 world-space points in metres, origin near the hand's centre (camera only)
   handedness: "Left"|"Right"|null,  // the user's real hand (camera only)
   bends: {thumb, index, middle, ring, pinky},  // 0 = straight, 1 = curled
@@ -24,7 +24,7 @@ HandFrame = {
 What `Agent.step(now, obs)` receives each frame:
 
 ```js
-obs = { hand: boolean, gesture: "FIST"|"OPEN"|"PEACE"|"THUMBS_UP"|"POINT"|"THUMBS_DOWN"|"I_LOVE_YOU"|"NONE" }
+obs = { hand: boolean, gesture: "FIST"|"OPEN"|"PEACE"|"THUMBS_UP"|"POINT"|"THUMBS_DOWN"|"I_LOVE_YOU"|"NONE"|"trained:<name>" }
 ```
 
 ## AgentState
@@ -33,9 +33,19 @@ What `Agent.step` returns:
 
 ```js
 AgentState = {
-  mode: "MANUAL"|"HOLD"|"AUTO"|"IDLE"|"GREET",   // REPLAY (Phase 4) and LLM (Phase 5) come later
+  mode: "MANUAL"|"HOLD"|"AUTO"|"IDLE"|"GREET"|"REPLAY",   // LLM (Phase 5) comes later
   progress: number,   // 0–1, how far through the ~0.9 s hold the current gesture is
-  candidate: string   // the gesture currently being held
+  candidate: string,  // the gesture currently being held
+  sends: string|null  // what holding it will do: a mode ("HOLD") or 'replay "Wave"'; null when nothing is being held
+}
+```
+
+`agent.replay` is `{ id, name }` of the motion playing in REPLAY. `agent.custom` maps trained gestures to actions:
+
+```js
+agent.custom = {
+  "trained:rock": { type: "mode", mode: "HOLD", label: "rock" },
+  "trained:swirl": { type: "motion", id: "m…", name: "Wave", label: "swirl" }
 }
 ```
 
@@ -77,4 +87,35 @@ Block = {
   x, y, z,   // centre, world units; resting on the table means y = TABLE.top + BLOCK_SIZE / 2
   yaw        // turn around the vertical axis; follows the arm while held, 0 once dropped
 }
+```
+
+## Motion
+
+A recorded motion (`core/motion.js`), saved under `handpilot.motions.v1` and in exported `.json` files.
+
+```js
+Motion = {
+  id,        // short id like "mlz3k9a0q1"; stays the same when renamed
+  name,      // up to 40 characters, unique (ignoring case)
+  robot,     // "humanoid" | "arm": which robot's joints it holds
+  hz,        // recording rate, 30
+  samples: [{ t, joints }]   // t: ms from the start, increasing; joints: Pose fields (humanoid) or ArmPose fields (arm)
+}
+// Export file: { format: "handpilot-motions", version: 1, motions: [Motion] }
+```
+
+## Training data
+
+The gesture trainer's data (`core/training.js`), saved under `handpilot.gestures.v1`.
+
+```js
+Training = {
+  maxDistance,   // KNN match distance, 0.2–1.5 (palm lengths), default 0.6
+  gestures: [{
+    name,        // unique (ignoring case)
+    action,      // null | { type: "mode", mode: "MANUAL"|"HOLD"|"AUTO"|"GREET" } | { type: "motion", id }
+    samples      // up to 300 vectors of 63 numbers from normalise(): (x, y, z) for each of the 21 points
+  }]
+}
+// Export file: { format: "handpilot-gestures", version: 1, ...Training }
 ```

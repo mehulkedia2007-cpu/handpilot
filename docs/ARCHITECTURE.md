@@ -54,9 +54,32 @@ The blocks follow the arm's *eased* grip, not the pinch, so whatever moves the a
 
 The agent itself doesn't know which robot is on screen. It decides the mode the same way for both; `main.js` only gives it different wording (`agent.actText`) for the log.
 
-Later phases add these pieces:
-- `core/knn.js` and `core/motion.js` (Phase 4)
-- the LLM agent and `server/` (Phase 5)
+Phase 4 adds learning:
+
+```
+eased pose (humanoid cur, or armCur) ─► core/motion.js createRecorder.sample(now, pose)   (~30 Hz, up to 60 s)
+                                                              ▼
+                               motion { id, name, robot, hz, samples: [{t, joints}] } ─► localStorage / .json
+                                                              ▼
+Play or a trained gesture ─► agent.startReplay ─► REPLAY ─► replayFrame(motion, elapsed, speed)
+                                                              │  sampleAt: binary search + linear interpolation
+                                                              ▼
+                               blendPose eases the robot to the replayed joints; done ─► agent.endReplay ─► MANUAL
+
+HandFrame.landmarks (camera, or the simulator's made-up hand) ─► core/training.js vectorFor
+                                                              │  core/hand.js normalise: minus wrist, ÷ palm length,
+                                                              │  mirror a left hand, flatten to 63 numbers
+                                                              ▼
+                               core/knn.js KNN.predict ─► { label, confidence, distance }
+                                                              │  "unknown" unless ≥ 60% of 5 neighbours agree
+                                                              │  and the nearest is within the match distance
+                                                              ▼
+            confident label ─► "trained:<name>" gesture (wins over pickGesture) ─► agent.custom[...] action
+```
+
+The trainer's recorder (`createSampler`) and the accuracy check (`holdoutSplit`, `evaluate`, `accuracyReport` in `core/knn.js`) are pure too; `ui/trainer.js` only draws them.
+
+Phase 5 adds the LLM agent and `server/`.
 
 ## The main loop (`src/main.js`)
 
@@ -64,12 +87,13 @@ The loop runs once per animation frame, about 60 times a second:
 
 1. **Read input.** `cam.read()` or `sim.read(now)` returns a `HandFrame`.
 2. **Filter.** `handFilter.filter(frame)` smooths it with One Euro filters. The camera frame's `t` is the time of its recognition, so a repeated frame is recognised and not filtered twice.
-3. **Classify.** `pickGesture(frame)` returns a gesture name.
-4. **Agent step.** `agent.step(now, { hand, gesture })` returns `{ mode, progress, candidate }`.
-5. **Pose.** `poseFor(mode, t, bends, yaw)` returns target joint angles, or `null` in HOLD.
+3. **Classify.** If any gestures are trained, the KNN classifies the normalised landmarks first; a confident answer becomes `"trained:<name>"`. Otherwise `pickGesture(frame)` returns a built-in gesture name. While the trainer is recording, the agent is shown `NONE`, so examples don't fire commands.
+4. **Agent step.** `agent.step(now, { hand, gesture })` returns `{ mode, progress, candidate, sends }`.
+5. **Pose.** `poseFor(mode, t, bends, yaw)` returns target joint angles, or `null` in HOLD. In REPLAY the pose comes from the motion being replayed instead (`replayFrame`).
 6. **Ease.** `blendPose(cur, target, alpha)` moves the current angles part of the way to the target. The filter already removed jitter, so this mainly softens jumps between modes: alpha is 0.35 normally, and 0.7 once the humanoid has been in MANUAL for 0.6 s, so it keeps up with fast finger movement. With the camera, palm x is first stretched by the **Hand sensitivity** gain (`stretch` in `core/hand.js`) before it becomes the body turn.
-7. **Render.** The robot copies `cur` onto its joints, and Three.js draws the frame.
-8. **UI.** Every ~70 ms the HUD and panels refresh, and once a second the FPS readout. The DOM is slower than WebGL, so this doesn't run every frame.
+7. **Record.** While recording, the eased pose is sampled (about 30 times a second), so a replay looks like what was on screen.
+8. **Render.** The robot copies `cur` onto its joints, and Three.js draws the frame.
+9. **UI.** Every ~70 ms the HUD and panels refresh, and once a second the FPS readout. The DOM is slower than WebGL, so this doesn't run every frame.
 
 The camera runs its own loop (`input/camera.js`). It calls `recognizeForVideo` only when `video.currentTime` has changed, so the model never runs twice on the same frame, and stores the latest result; `read()` returns whatever is newest. Recognition is synchronous, so it does share the main thread with rendering; the performance HUD shows its cost in ms. Moving it to a Web Worker is the optional P1.5.
 
@@ -78,6 +102,8 @@ The camera runs its own loop (`input/camera.js`). It calls `recognizeForVideo` o
 `core/settings.js` loads and saves one JSON object under `handpilot.settings.v1`: calibration, filter settings, selected robot and gesture mappings. `main.js` passes in `localStorage` (or `null` if even touching it throws). Every field is validated on load, so a corrupt or old value falls back to its default without losing the others.
 
 The challenge's best time is kept under its own key, `handpilot.challenge.v1`, by `core/challenge.js`, with the same try/catch and validation. It is separate so that **Reset to defaults** doesn't wipe a record.
+
+Phase 4 adds two more keys, also separate from settings: `handpilot.motions.v1` (`core/motion.js`: `loadMotions`, `saveMotions`) and `handpilot.gestures.v1` (`core/training.js`: `loadTraining`, `saveTraining`). Both check every entry on load and skip or reset what's broken. Their export files carry a `format` and `version` field, and an import is checked in full (`parseMotionFile`, `parseTrainingFile`) before anything changes.
 
 ## Module rules
 

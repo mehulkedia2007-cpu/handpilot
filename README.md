@@ -27,6 +27,7 @@
   | Peace sign | AUTO (toggle) | Dances on its own |
   | Thumbs up | GREET | Waves for 3 s |
   | No hand for 3 s | IDLE | Neutral pose, resumes when your hand returns |
+  | A gesture you trained | your choice | Switches mode or plays a saved motion |
 
 - **Hand sensitivity.** One slider stretches your hand movement around the middle of the camera picture, so a comfortable movement turns the humanoid fully or reaches the sides of the arm's table.
 - **Works without a camera.** A slider simulator with presets drives the same pipeline, so you can try every gesture without a webcam.
@@ -35,9 +36,12 @@
 - **Robot arm teleoperation.** Switch between Humanoid and Arm in the header. Your palm moves a target sphere inside a workspace box (left/right, up/down, and depth from how big your hand looks), with a **Hand sensitivity** slider so small hand movements can cover the whole box, and **inverse kinematics** works out the base, shoulder, elbow and wrist angles to put the gripper there, keeping it level. The sphere turns red when the target is out of reach. **Pinch** thumb and index to close the gripper; hysteresis stops it chattering. The same gestures work: fist holds, peace sign runs a pick-and-place demo, thumbs up waves, and with no hand the arm parks itself. A debug panel shows the live joint angles and can drive them by hand.
 - **Pick-and-place stacking challenge.** With the arm selected, three blocks (red, green, blue) sit on a table. Move the gripper over a block until it glows, pinch to grab it, and open your fingers to drop it: it falls straight down onto the table or the highest block under it, and snaps neatly into line when it covers more than 60% of that block. Press **Start** and stack all three into one tower as fast as you can; the timer stops when the tower stands, and your best time is saved in the browser. The peace-sign AUTO demo uses the same rules and really stacks the red block on the blue one.
 
-MediaPipe's built-in gestures drive the commands when it is confident; otherwise the rule-based classifier on the bends decides (and always does for the simulator).
+- **Record and replay motions.** Press **Record**, move either robot, and press **Stop recording**: its joint angles are saved about 30 times a second. **Play** replays a motion at 0.5×, 1× or 2× in a REPLAY mode, smoothly interpolated between samples; holding any command gesture stops it. Motions are saved in the browser and can be renamed, deleted, exported to a `.json` file and imported back (every file is checked first, with a clear error if something is wrong).
+- **Teach it your own gestures.** The **Gesture trainer** records 30 examples of a hand shape in 3 seconds (after a countdown), normalises them so size and position don't matter, and recognises them with a **K-nearest-neighbours** classifier that runs in the browser. Map each gesture to a mode or a saved motion; a confident trained gesture wins over the built-in ones. **Check accuracy** tests it on 20% of the examples it didn't learn from and shows per-gesture accuracy and a confusion table. Training data can be exported and imported too. It works with the simulator's made-up hand as well as the camera.
 
-Coming next (see [the build plan](#roadmap)): recording and replaying motions, in-browser gesture learning (KNN), and an LLM agent with tool calling.
+MediaPipe's built-in gestures drive the commands when it is confident; otherwise the rule-based classifier on the bends decides (and always does for the simulator). Trained gestures come first when the classifier is sure.
+
+Coming next (see [the build plan](#roadmap)): an LLM agent with tool calling.
 
 ## Run it locally
 
@@ -60,7 +64,7 @@ Your browser opens **http://localhost:5173**. Click **Start camera** and allow a
 npm test
 ```
 
-This runs Node's built-in test runner on `tests/`. The tests cover the pure logic in `src/core/` (finger maths, gesture rules, the agent state machine, robot poses, the One Euro filter, saved settings, the FPS meter, inverse kinematics, pinch, block stacking and the challenge timer), need no browser or network, and finish in under a second.
+This runs Node's built-in test runner on `tests/`. The tests cover the pure logic in `src/core/` (finger maths, gesture rules, the agent state machine, robot poses, the One Euro filter, saved settings, the FPS meter, inverse kinematics, pinch, block stacking, the challenge timer, motion recording and replay, landmark normalisation, the KNN classifier, the trainer's data and the accuracy report), need no browser or network, and finish in under a second.
 
 ### Browser checklist (end to end)
 
@@ -69,7 +73,7 @@ npx playwright install chromium   # once, downloads a headless Chromium
 npm run e2e
 ```
 
-This opens the app in headless Chromium and works through most of [docs/TESTING.md](docs/TESTING.md) by itself, in about two minutes. It covers every gesture and mode, settings surviving a reload, the arm's IK and pinch, grabbing, stacking and snapping blocks, a full timed challenge with the best time, a fake webcam with no hand (IDLE), blocked storage, phone width, and console errors. It drives the simulator sliders, so it can't judge real hand tracking; those items still need a person and a camera. It needs internet for the Three.js and MediaPipe CDNs.
+This opens the app in headless Chromium and works through most of [docs/TESTING.md](docs/TESTING.md) by itself, in about two minutes. It covers every gesture and mode, settings surviving a reload, the arm's IK and pinch, grabbing, stacking and snapping blocks, a full timed challenge with the best time, recording and replaying a motion, training two gestures and triggering them, the accuracy report, a fake webcam with no hand (IDLE), blocked storage, phone width, and console errors. It drives the simulator sliders, so it can't judge real hand tracking; those items still need a person and a camera. It needs internet for the Three.js and MediaPipe CDNs.
 
 ## How it works
 
@@ -80,7 +84,9 @@ Simulator sliders ────────────────────�
                  core/hand.js     finger ratios ─► bends (0–1), palm, pinch
                  core/filters.js  One Euro filter removes jitter
                  core/gestures.js built-in label, or rules on the bends ─► gesture name
+                 core/knn.js      trained gestures (normalised landmarks) win when the KNN is sure
                  core/agent.js    SEE ─► DECIDE (mode) ─► ACT (target pose)
+                 core/motion.js   record the pose ~30×/s; REPLAY interpolates a saved motion
                  core/workspace.js + core/ik.js + core/pinch.js  (arm) palm ─► 3D target ─► joint angles, pinch ─► grip
                  core/stacking.js + core/challenge.js  grip + gripper point ─► grab, drop, stack ─► timer
                                            ▼
@@ -90,14 +96,14 @@ Simulator sliders ────────────────────�
 - `src/core/` holds the **pure logic**: no DOM, camera or Three.js, so it can be unit-tested in Node.
 - `src/input/` holds the **sources**: camera and simulator. Both produce the same `HandFrame` object.
 - `src/scene/` holds the **3D world**: stage, lights, orbit camera and the robot.
-- `src/ui/` holds the **panels**: HUD, finger channels, agent log and gesture guide.
+- `src/ui/` holds the **panels**: HUD, finger channels, agent log, gesture guide, motions and the gesture trainer.
 - `src/main.js` holds the **main loop**, which wires the parts together once per animation frame.
 
 More detail is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Plain-language explanations of the ideas are in [docs/LEARNING.md](docs/LEARNING.md).
 
 ## Privacy
 
-**Video never leaves your browser.** Every frame is processed on your own machine inside the browser tab. Nothing is uploaded, recorded or stored. The only network requests download libraries (Three.js, MediaPipe) and fonts from public CDNs. Calibration and filter settings are saved in your browser's `localStorage` (key `handpilot.settings.v1`), and your best challenge time under `handpilot.challenge.v1`. Neither is ever sent anywhere.
+**Video never leaves your browser.** Every frame is processed on your own machine inside the browser tab. Nothing is uploaded, recorded or stored. The only network requests download libraries (Three.js, MediaPipe) and fonts from public CDNs. Calibration and filter settings are saved in your browser's `localStorage` (key `handpilot.settings.v1`), your best challenge time under `handpilot.challenge.v1`, your motions under `handpilot.motions.v1` and your trained gestures under `handpilot.gestures.v1`. Trained gestures are stored as 63 numbers per example (the normalised hand shape), never as pictures. None of it is ever sent anywhere; **Export** saves a file to your own computer.
 
 ## Deploy
 
@@ -130,7 +136,7 @@ reference/          the original single-file prototype
 | 1 ✅ | MediaPipe Gesture Recognizer, One Euro filter, saved settings, FPS HUD |
 | 2 ✅ | Robot arm teleoperation with inverse kinematics and pinch-to-grab |
 | 3 ✅ | Pick-and-place block-stacking challenge |
-| 4 | Record/replay motions and train custom gestures in the browser (KNN) |
+| 4 ✅ | Record/replay motions and train custom gestures in the browser (KNN) |
 | 5 | LLM agent with tool calling and safety limits |
 | 6 | Optional real servo over Web Serial, and launch polish |
 

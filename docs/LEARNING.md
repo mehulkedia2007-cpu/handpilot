@@ -198,3 +198,52 @@ The humanoid also felt laggy because two smoothers were stacked: the One Euro fi
 The challenge is three states: **ready → running → won**. Start resets the blocks and records the start time. Each frame it checks "one tower, nothing held"; the first time that's true it stores the time and moves to won. Like the agent, it takes `now` as an argument instead of reading the clock, so tests can pretend 12.5 seconds passed. The best time is stored in `localStorage` with the same try/catch and validation as the settings.
 
 **Interview line:** *"I turned the arm into a game: you stack blocks with your hand against a timer. The grab, drop and stacking rules are pure functions I unit-test, including an end-to-end test where the arm's automatic routine really stacks one block on another. I used forward kinematics to find where the gripper actually is, and footprint overlap to decide when a block snaps into place."*
+
+---
+
+## Phase 4: The robot learns
+
+### 1. Recording a motion is just sampling
+A motion is a list of snapshots: `{ t, joints }`, the time and every joint angle. We take one about 30 times a second. The screen may draw 60 or 144 frames a second, so the recorder only keeps a frame when about 1/30 s has passed since the last one it kept. That way a motion is the same size on any screen. It records the pose the robot actually showed (after easing), so a replay looks like what you saw.
+
+### 2. Replay with linear interpolation
+When replaying, the current time almost never lands exactly on a sample. So we find the two samples either side of it and blend them:
+
+```
+u = (t − t₁) / (t₂ − t₁)          how far between the two samples, 0..1
+angle = a₁ + (a₂ − a₁) × u        the "lerp" from Phase 0
+```
+
+Before the first sample we hold the first pose, after the last we hold the last. Speed is just a multiplier on time: at 2× we ask for the pose at `2 × elapsed`. Finding the two samples uses a **binary search** (halve the range each step), so even a minute-long motion of 1,800 samples takes about 11 steps per frame.
+
+### 3. A new agent mode, and the "already held" problem
+REPLAY is one more state in the agent. Play enters it, the end of the motion leaves it, and any held command gesture interrupts it, because the hold logic compares a gesture with the *current* mode. One subtle bug came up while designing it: with the camera on, your hand is usually open, and an open palm means "MANUAL". It would stop every replay 0.9 s after it started. So starting a replay marks the gesture you're already holding as used up; only a gesture you show *after* it starts can interrupt it.
+
+### 4. Saving and checking files
+Motions and training data are saved in `localStorage` and can be exported as `.json` files. A file from outside is **untrusted input**: it might be from an old version, hand-edited or just a different file. So `checkMotion` checks every field (a name, a known robot, at least two samples, times that go forward, every joint a finite number) and builds a *clean copy* with only the fields we know. The import is **all or nothing**: if any motion is bad, nothing changes and the message says which one and why. Each file has a `format` and `version` field so a future version can still read old files.
+
+### 5. Normalising a hand
+The camera gives 21 points in picture coordinates. The same fist looks completely different if your hand is bigger, closer or in another corner of the picture. `normalise` removes those differences:
+1. **Subtract the wrist** from every point, so the wrist is always at (0, 0, 0). Position no longer matters.
+2. **Divide by the palm's length** (wrist to middle knuckle). Size and distance no longer matter.
+3. **Mirror a left hand**, so it matches a gesture you taught with your right.
+4. **Flatten** the 21 (x, y, z) points into one list of 63 numbers: a *feature vector*.
+
+Rotating so the palm points up is an option too, but it's off: it would make thumbs up and thumbs down the same vector. Choosing what a model should ignore is a real design decision.
+
+### 6. K-nearest neighbours (KNN)
+KNN is the simplest classifier there is. **Training** means storing the labelled examples, nothing else. To **classify** a new hand:
+1. measure the straight-line distance from its 63 numbers to every stored example;
+2. take the 5 closest (k = 5);
+3. let them vote. The label with most votes wins, and **confidence** is the share that agreed (4 of 5 = 0.8).
+
+Two safety checks stop it guessing: under 60% agreement means "unknown", and so does a nearest example that is too far away (the **match distance**). The second check matters most. With only one trained gesture every vote is unanimous, so without a distance limit *every* hand would be called that gesture. The tests check this with shapes that were never taught.
+
+KNN has no training step to wait for, so the robot learns instantly in the browser. The cost is that predicting compares against every example; with a few hundred that's well under a millisecond.
+
+### 7. Measuring accuracy honestly
+Testing a classifier on the examples it learned from is cheating: each example's nearest neighbour is itself, so it scores 100%. Instead we hide 20% of each gesture's examples (the **hold-out set**), train on the other 80%, and count how many hidden ones it gets right. The split is **stratified** (20% of *each* gesture, so a small one isn't left out) and **shuffled** with a seeded random generator, so a test can repeat it exactly.
+
+The **confusion table** shows more than one score: rows are what you showed, columns what it answered. Numbers on the diagonal are right answers; anything off the diagonal shows *which* gestures it mixes up, which tells you which one needs more or better examples.
+
+**Interview line:** *"The robot learns two ways in the browser. It records and replays motions using linear interpolation, and it learns new hand gestures with a KNN classifier on normalised landmarks: I subtract the wrist and divide by palm size so position and hand size don't matter. A distance threshold stops it labelling hands it was never taught, and I measure it honestly with a stratified 80/20 hold-out split and a confusion table."*

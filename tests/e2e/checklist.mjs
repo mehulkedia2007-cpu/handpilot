@@ -36,6 +36,7 @@ const errors = [];
 // MediaPipe's WASM prints this harmless INFO line through console.error; ignore only that.
 page.on('console', (m) => { if (m.type() === 'error' && !/^INFO: Created TensorFlow Lite/.test(m.text())) errors.push(m.text()); });
 page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
+page.on('dialog', (d) => d.accept());   // the Delete confirmations
 
 const set = (id, v) => page.evaluate(([id, v]) => { const e = document.getElementById(id); e.value = v; e.dispatchEvent(new Event('input', { bubbles: true })); e.dispatchEvent(new Event('change', { bubbles: true })); }, [id, v]);
 const text = (id) => page.evaluate((id) => document.getElementById(id).textContent, id);
@@ -212,6 +213,82 @@ check('debug yaw slider drives the joint', (await joint('yaw')) === 60);
 await page.click('#btnPark'); await sleep(200);
 check('Park arm resets sliders', (await joint('yaw')) === 0);
 await page.uncheck('#jointDebug');
+
+/* ---------- Phase 4: motions ---------- */
+await fresh();
+const shape = async (a) => { for (const [i, f] of ['thumb', 'index', 'middle', 'ring', 'pinky'].entries()) await set('s_' + f, a[i]); };
+const motionNames = () => page.evaluate(() => [...document.querySelectorAll('#motionList .m-name')].map((e) => e.textContent));
+await page.click('#btnRec'); await sleep(200);
+check('Record shows a REC timer on the stage', !(await hidden('recHud')) && /^REC \d/.test(await text('recHud')), await text('recHud'));
+for (let i = 0; i <= 20; i++) { await set('s_index', i * 5); await set('s_yaw', i * 5 - 50); await sleep(50); }
+await page.click('#btnRec'); await sleep(200);
+const meta = await page.textContent('#motionList .hint');
+const [, secsRec, nSamples] = meta.match(/([\d.]+) s · (\d+) samples/) || [];
+check('Stop recording saves "Motion 1" at about 30 samples/s', (await motionNames())[0] === 'Motion 1' && Math.abs(nSamples / secsRec - 30) < 4, meta);
+await page.click('#speedSwitch button:has-text("2×")');
+await page.click('#motionList button:has-text("Play")'); await sleep(250);
+check('Play -> REPLAY, button reads Stop', (await mode()) === 'REPLAY' && (await page.textContent('#motionList .m-acts button')) === 'Stop');
+await sleep(1200);
+check('2× replay ends by itself -> MANUAL', (await mode()) === 'MANUAL' && /"Motion 1" finished/.test(await log()));
+await page.click('#speedSwitch button:has-text("0.5×")');
+await page.click('#motionList button:has-text("Play")'); await sleep(300);
+await preset('Fist'); await sleep(1400);
+check('a held fist interrupts a replay', (await mode()) === 'HOLD');
+await preset('Open palm'); await sleep(1600);
+await page.click('#motionList button:has-text("Rename")');
+await page.fill('.m-rename input', '  Big   wave '); await page.keyboard.press('Enter'); await sleep(100);
+check('Rename tidies the name', (await motionNames())[0] === 'Big wave');
+await page.reload(); await page.waitForSelector('#stage canvas'); await sleep(1000);
+check('motions survive a reload', (await motionNames())[0] === 'Big wave');
+const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#btnMotionExport')]);
+const exported = await (await import('node:fs/promises')).readFile(await dl.path(), 'utf8');
+check('Export all downloads handpilot-motions.json', dl.suggestedFilename() === 'handpilot-motions.json' && JSON.parse(exported).motions.length === 1);
+await page.click('#motionList button:has-text("Delete")'); await sleep(150);
+check('Delete removes the motion', (await motionNames()).length === 0);
+await page.setInputFiles('#btnMotionImport + input', { name: 'm.json', mimeType: 'application/json', buffer: Buffer.from(exported) }); await sleep(300);
+check('Import brings it back', (await motionNames())[0] === 'Big wave' && /Imported 1 motion/.test(await text('motionNote')));
+await page.setInputFiles('#btnMotionImport + input', { name: 'bad.json', mimeType: 'application/json', buffer: Buffer.from('{"format":"handpilot-motions","version":1,"motions":[{"id":"a1","name":"Oops","robot":"arm","samples":[]}]}') }); await sleep(300);
+check('a bad motions file gives a clear error and changes nothing', /Motion 1 \("Oops"\) can't be imported: it needs at least 2 samples/.test(await text('motionNote')) && (await motionNames()).length === 1, await text('motionNote'));
+
+/* ---------- Phase 4: gesture trainer ---------- */
+async function train(name, a) {
+  await shape(a); await page.fill('#trName', name); await page.click('#btnTrRec'); await sleep(400);
+  const countdown = await text('trStatus');
+  await sleep(3000);
+  // Wobble the fingers a little so the 30 samples differ, like a real hand.
+  for (let i = 0; i < 32; i++) { await shape(a.map((v, j) => Math.max(0, Math.min(100, v + ((i * 7 + j * 13) % 21) - 10)))); await sleep(100); }
+  await shape(a); await sleep(400);
+  return countdown;
+}
+const countdown = await train('rock', [0, 0, 100, 100, 0]);
+check('trainer counts down before recording', /Get ready: show "rock" in [123]/.test(countdown), countdown);
+check('trainer records 30 samples', /Recorded 30 samples of "rock"/.test(await text('trStatus')), await text('trStatus'));
+await train('three', [100, 0, 0, 0, 100]);
+await page.selectOption('select[aria-label="Action for rock"]', 'mode:HOLD');
+const motionOpt = await page.$eval('select[aria-label="Action for three"] optgroup[label="Play a motion"] option', (o) => o.value);
+await page.selectOption('select[aria-label="Action for three"]', motionOpt);
+await preset('Open palm'); await sleep(1500);
+check('an untaught shape is "nothing it was taught"', /nothing it was taught/.test(await text('trSeen')) && (await mode()) === 'MANUAL', await text('trSeen'));
+await shape([0, 0, 100, 100, 0]); await sleep(500);
+check('a trained gesture is recognised', /^Sees: rock/.test(await text('trSeen')) && (await text('gestureName')) === 'rock', await text('trSeen'));
+await sleep(1100);
+check('trained gesture mapped to HOLD -> HOLD', (await mode()) === 'HOLD' && /"rock" held, latch HOLD/.test(await log()));
+await preset('Open palm'); await sleep(1600);
+await shape([100, 0, 0, 0, 100]); await sleep(1500);
+check('trained gesture mapped to a motion -> REPLAY', (await mode()) === 'REPLAY' && /"three" held, replay a saved motion/.test(await log()));
+await preset('Open palm'); await sleep(2500);
+await preset('Fist'); await sleep(1600);
+check('built-in gestures still work alongside trained ones', (await mode()) === 'HOLD');
+await preset('Open palm'); await sleep(1600);
+await page.click('#btnTrAcc'); await sleep(200);
+const report = await text('trReport');
+check('Check accuracy shows a score and a confusion table', /Overall \d+% \(\d+ of 12 right\)/.test(report) && await page.$$eval('#trReport tr', (r) => r.length) === 3, report.slice(0, 90));
+await page.reload(); await page.waitForSelector('#stage canvas'); await sleep(1000);
+check('trained gestures and actions survive a reload', await page.$eval('select[aria-label="Action for rock"]', (s) => s.value) === 'mode:HOLD');
+await page.click('#motionList button:has-text("Delete")'); await sleep(200);
+check('deleting a motion clears the gesture that played it', await page.$eval('select[aria-label="Action for three"]', (s) => s.value) === '' && /1 trained gesture no longer plays it/.test(await text('motionNote')));
+await page.setInputFiles('#btnTrImport + input', { name: 'bad.json', mimeType: 'application/json', buffer: Buffer.from('{"format":"handpilot-gestures","version":1,"gestures":[{"name":"x","samples":[[1,2]]}]}') }); await sleep(300);
+check('a bad gestures file gives a clear error', /sample 1 is not a list of 63 numbers/.test(await text('trNote')), await text('trNote'));
 
 /* ---------- camera (fake device, no hand) ---------- */
 await page.click('#btnCam');

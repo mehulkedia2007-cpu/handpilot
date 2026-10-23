@@ -2,7 +2,7 @@
 
 Run `npm test` first; it must pass. Then go through this list in Chrome at the end of each phase. Tick an item only when you have actually tried it.
 
-`npm run e2e` (see the README) runs most of this list automatically in headless Chromium. Phase 3 items were ticked after that run (57/57 checks) plus the owner's camera tries. MediaPipe prints one harmless `INFO: Created TensorFlow Lite XNNPACK delegate for CPU` line through `console.error` when the camera starts; that is not an app error.
+`npm run e2e` (see the README) runs most of this list automatically in headless Chromium. Phase 3 items were ticked after that run (57/57 checks) plus the owner's camera tries. Phase 4 items were ticked after a run with 79/79 checks; the unticked ones (exact replay speeds, renaming edge cases, Cancel, the camera) still need a person. MediaPipe prints one harmless `INFO: Created TensorFlow Lite XNNPACK delegate for CPU` line through `console.error` when the camera starts; that is not an app error.
 
 ## Simulator only (no camera)
 - [x] The page loads with no errors in the console (DevTools → Console).
@@ -48,6 +48,28 @@ Run `npm test` first; it must pass. Then go through this list in Chrome at the e
 - [x] Reload: the best time is still shown. **Reset to defaults** doesn't clear it.
 - [x] **Restart** during a run starts a fresh run; **Reset blocks** puts the blocks back and stops the timer.
 - [x] Switching to Humanoid while holding a block drops it; switching during a run cancels the run.
+
+## The robot learns (Phase 4)
+- [x] **Record** turns red and a **REC** timer shows on the stage; moving the robot and pressing **Stop recording** adds "Motion 1" with its robot, length and sample count (about 30 samples a second).
+- [ ] **Play** switches to REPLAY (blue badge), the robot repeats the movement smoothly, and it returns to MANUAL at the end. The button reads **Stop** while it plays and stops it.
+- [ ] **0.5×** takes about twice as long as **1×**; **2×** about half.
+- [x] During a replay, holding a different command gesture (e.g. **Fist**) stops it; the gesture you already held when it started doesn't.
+- [ ] Playing an arm motion while the humanoid is shown switches to the arm. An arm motion that closed the gripper on a block grabs it again.
+- [ ] Recording stops by itself after 60 s. Switching robots while recording stops and saves the recording.
+- [ ] **Rename** (Enter saves, Escape cancels) and **Delete** (after a confirmation) work; an empty or duplicate name shows a message.
+- [ ] Reload: motions are still there. **Reset to defaults** keeps them.
+- [x] **Export all** downloads `handpilot-motions.json`; deleting everything and importing it brings the same motions back. Importing it again changes nothing.
+- [x] Importing a broken file (not JSON, the wrong kind of file, a motion with one sample) shows a clear message and changes nothing.
+- [ ] **Gesture trainer:** typing a name and pressing **Record** (or Enter) counts down 3, 2, 1, then counts samples to 30. **Cancel** stops it.
+- [ ] While the trainer records, holding a command gesture doesn't change the mode.
+- [x] After training two gestures, the **Sees:** line names the one you show and says "nothing it was taught" for other shapes.
+- [x] Mapping a gesture to HOLD (or a motion) and holding it for ~1 s does that; the HUD says "Keep holding to …" first and the log names the gesture.
+- [ ] A trained gesture that looks like a built-in one wins; built-in gestures still work for shapes that weren't trained.
+- [x] Deleting a motion that a gesture plays sets that gesture back to "No action".
+- [ ] **Check accuracy** shows an overall score, accuracy per gesture and a confusion table; it's hidden again after the training data changes.
+- [ ] **Match distance**: lowering it makes untaught shapes "unknown" sooner; it survives a reload.
+- [ ] Gesture **Export** / **Import** round-trips; a gesture with the same name is replaced.
+- [ ] Camera: two custom gestures (e.g. rock 🤘 and three fingers) are recognised reliably with a real hand, with either hand.
 
 ## Camera (Chrome, Edge, Safari)
 - [x] **Start camera** asks for permission, then shows the preview with the hand skeleton. The note says whether the model runs on the GPU or CPU.
