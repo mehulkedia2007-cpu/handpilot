@@ -237,3 +237,44 @@ test('a trained gesture mapped to AUTO toggles it like the peace sign', () => {
   assert.equal(run(show('loop'), 500).sends, 'MANUAL');
   assert.equal(run(show('loop'), 700).mode, 'MANUAL');
 });
+
+test('LLM: the language agent takes over and hands back to MANUAL', () => {
+  const { agent, run, log } = makeAgent();
+  run(show('OPEN'), 600);
+  agent.startLlm(600, 'command "stack red on blue"');
+  assert.equal(agent.mode, 'LLM');
+  // The open palm you were already holding doesn't interrupt it.
+  assert.equal(run(show('OPEN'), 2000).mode, 'LLM');
+  assert.equal(agent.commands, 0);
+  agent.endLlm(3000);
+  assert.equal(agent.mode, 'MANUAL');
+  assert.ok(log.some((l) => /control returns to you/.test(l)));
+});
+
+test('LLM: no hand does not send it to IDLE, and the humanoid holds still', () => {
+  const { agent, run } = makeAgent();
+  agent.startLlm(0, 'go');
+  assert.equal(run(NO_HAND, 5000).mode, 'LLM');
+  assert.equal(poseFor('LLM', 1, { thumb: 0, index: 0, middle: 0, ring: 0, pinky: 0 }, 0), null);
+});
+
+test('LLM: a newly held command gesture counts, so the page can stop the agent', () => {
+  const { agent, run } = makeAgent();
+  run(show('OPEN'), 200);
+  agent.startLlm(200, 'go');
+  run(show('NONE'), 400);
+  assert.equal(run(show('FIST'), 1200).mode, 'HOLD');
+  assert.equal(agent.commands, 1);
+});
+
+test('LLM: ending while holding a block goes to HOLD; set_mode does not count as a gesture', () => {
+  const { agent } = makeAgent();
+  agent.startLlm(0, 'go');
+  agent.endLlm(100, 'done', 'HOLD');
+  assert.equal(agent.mode, 'HOLD');
+  agent.llmSetMode(200, 'AUTO');
+  assert.equal(agent.mode, 'AUTO');
+  agent.endLlm(300);   // not in LLM any more: leaves the chosen mode alone
+  assert.equal(agent.mode, 'AUTO');
+  assert.equal(agent.commands, 0);
+});

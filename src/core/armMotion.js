@@ -45,9 +45,10 @@ export function autoPath(t) {
 // The goal for the arm in a mode.
 // t: seconds since the mode began (so AUTO always starts at the top of its path).
 // manual: { target, closed } from the hand; target is null when no hand is in view.
+// llm: { target, grip } from the language agent (core/llmArm.js), used in LLM mode.
 // Returns { pose, target, reachable }, or null to keep the arm exactly where it is.
 // REPLAY is null too: main.js takes the pose from the motion being replayed.
-export function armGoalFor(mode, t, manual = {}) {
+export function armGoalFor(mode, t, manual = {}, llm = null) {
   if (mode === 'HOLD' || mode === 'REPLAY') return null;
   if (mode === 'IDLE') return { pose: defaultArmPose(), target: null, reachable: true };
   if (mode === 'GREET') {
@@ -57,7 +58,10 @@ export function armGoalFor(mode, t, manual = {}) {
   }
   let target, grip;
   if (mode === 'AUTO') ({ target, grip } = autoPath(t));
-  else {
+  else if (mode === 'LLM') {
+    if (!llm || !llm.target) return null;
+    target = llm.target; grip = llm.grip;
+  } else {
     // MANUAL: follow the hand. With no hand yet the arm waits where it is
     // (the agent parks it in IDLE after a few seconds).
     if (!manual.target) return null;
@@ -75,6 +79,7 @@ export const ARM_MODE_DESC = {
   IDLE: 'Waiting for a hand. Arm parked',
   GREET: 'Waving hello',
   REPLAY: 'Playing a saved motion. Hold any command gesture to stop',
+  LLM: 'The language agent is driving. Hold a fist or press Stop to take over',
 };
 export const ARM_ACT_TEXT = {
   MANUAL: 'move the gripper to your hand, pinch to grab',
@@ -83,4 +88,5 @@ export const ARM_ACT_TEXT = {
   IDLE: 'park the arm',
   GREET: 'wave the gripper for 3 s',
   REPLAY: 'play back a saved motion',
+  LLM: 'move the gripper as the language agent asks',
 };

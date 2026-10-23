@@ -3,7 +3,7 @@
 import { clamp, lerp } from './hand.js';
 import { COMMANDS, SAYS } from './gestures.js';
 
-export const MODES = ['MANUAL', 'HOLD', 'AUTO', 'IDLE', 'GREET', 'REPLAY'];
+export const MODES = ['MANUAL', 'HOLD', 'AUTO', 'IDLE', 'GREET', 'REPLAY', 'LLM'];
 
 // What the agent says it will do when it enters each mode.
 const ACT = {
@@ -11,6 +11,8 @@ const ACT = {
   HOLD: 'freeze every joint at its current angle',
   AUTO: 'run the dance routine',
   GREET: 'wave the right arm for 3 s',
+  IDLE: 'ease the robot back to its neutral pose',
+  LLM: 'carry out the language agent\'s tool calls',
 };
 
 export class Agent {
@@ -29,6 +31,9 @@ export class Agent {
     // Trained gestures (Phase 4): { "trained:name": action }, where an action is
     // { type: 'mode', mode, label } or { type: 'motion', id, name, label }. Set by main.js.
     this.custom = {};
+    // Counts command gestures that fired. The language agent (Phase 5) watches it:
+    // any command you hold while it works stops it, the same way it stops a replay.
+    this.commands = 0;
   }
 
   setMode(now, mode, why, act) {
@@ -72,6 +77,7 @@ export class Agent {
   }
 
   runCommand(now, g) {
+    this.commands++;
     const c = this.custom[g];
     const who = c && `"${c.label || g}"`;   // trained gestures are logged by their own name
     if (c && c.type === 'motion') this.startReplay(now, c, who + ' held, replay a saved motion');
@@ -95,6 +101,27 @@ export class Agent {
 
   endReplay(now, why = 'replay finished') {
     if (this.mode === 'REPLAY') this.setMode(now, 'MANUAL', why, ACT.MANUAL);
+  }
+
+  // LLM (Phase 5): the language agent drives the arm through tool calls.
+  // Like a replay, the gesture you are already holding doesn't count as an interruption.
+  startLlm(now, why) {
+    if (this.mode === 'LLM') return;
+    this.fired = true;
+    this.setMode(now, 'LLM', why, ACT.LLM);
+  }
+
+  // next is MANUAL, or HOLD when the arm still holds a block: back in MANUAL an
+  // open hand (or the simulator's open pinch) would drop it straight away.
+  endLlm(now, why = 'language agent finished', next = 'MANUAL') {
+    if (this.mode !== 'LLM') return;
+    const tail = next === 'MANUAL' ? ', control returns to you' : ', HOLD keeps the block up';
+    this.setMode(now, next, why + tail, ACT[next]);
+  }
+
+  // A set_mode tool call. It doesn't count as a command gesture, so it doesn't stop the agent.
+  llmSetMode(now, mode) {
+    this.setMode(now, mode, 'language agent asked for ' + mode, ACT[mode]);
   }
 
   // obs = { hand: boolean, gesture: string }. Returns the AgentState.
@@ -135,9 +162,10 @@ export class Agent {
 // Target joint angles in radians for each mode.
 // t is seconds since start, b the finger bends, yaw the body turn.
 // HOLD returns null so the robot keeps its current pose. REPLAY also returns
-// null: main.js takes the pose from the motion being replayed instead.
+// null: main.js takes the pose from the motion being replayed instead. LLM drives
+// the arm, so the humanoid simply holds still.
 export function poseFor(mode, t, b, yaw) {
-  if (mode === 'HOLD' || mode === 'REPLAY') return null;
+  if (mode === 'HOLD' || mode === 'REPLAY' || mode === 'LLM') return null;
   if (mode === 'AUTO') {
     return {
       rS: 1.5 + Math.sin(t * 2.2) * 0.9, rE: 0.6 + 0.5 * Math.sin(t * 4.4 + 1),

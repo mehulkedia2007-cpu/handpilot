@@ -53,11 +53,11 @@ test('the AUTO path passes through its keys and loops smoothly', () => {
   }
 });
 
-test('every mode gives a finite pose (or null for HOLD and REPLAY), even with bad time', () => {
+test('every mode gives a finite pose (or null for HOLD, REPLAY and LLM with no target), even with bad time', () => {
   for (const mode of MODES) {
     for (const t of [0, 1.7, 100, NaN, -3]) {
       const g = armGoalFor(mode, t, { target: { x: 0, y: 1.2, z: 1.6 }, closed: false });
-      if (mode === 'HOLD' || mode === 'REPLAY') assert.equal(g, null);
+      if (mode === 'HOLD' || mode === 'REPLAY' || mode === 'LLM') assert.equal(g, null);
       else assert.ok(finitePose(g.pose), `${mode} t=${t}`);
     }
   }
