@@ -1,11 +1,11 @@
 // Side panels: finger channels, the agent pipeline + log, and the gesture guide.
 import { FINGERS } from '../core/hand.js';
-import { LABEL } from '../core/gestures.js';
+import { gestureLabel } from '../core/gestures.js';
 
 const NAMES = { thumb: 'Thumb', index: 'Index', middle: 'Middle', ring: 'Ring', pinky: 'Pinky' };
 const DRIVES = { thumb: 'drives head nod', index: 'drives right shoulder', middle: 'drives right elbow', ring: 'drives left shoulder', pinky: 'drives left elbow' };
 const ARM_DRIVES = { thumb: 'pinch with index to grab', index: 'pinch with thumb to grab', middle: 'used for commands', ring: 'used for commands', pinky: 'used for commands' };
-const ACT_TEXT = { MANUAL: 'copy finger bends to joints', HOLD: 'hold every joint still', AUTO: 'run the dance routine', IDLE: 'ease to neutral pose', GREET: 'wave the right arm' };
+const ACT_TEXT = { MANUAL: 'copy finger bends to joints', HOLD: 'hold every joint still', AUTO: 'run the dance routine', IDLE: 'ease to neutral pose', GREET: 'wave the right arm', REPLAY: 'play back a saved motion' };
 const GUIDE = [
   ['Open palm', [0, 0, 0, 0, 0], 'MANUAL. The robot mirrors your fingers.'],
   ['Fist', [1, 1, 1, 1, 1], 'HOLD. Freezes the robot where it is.'],
@@ -53,7 +53,7 @@ export function createAgentPanel(els, t0) {
 
   function update(mode, gesture, hand) {
     els.agentMode.textContent = mode;
-    els.pSee.textContent = hand ? 'hand tracked, gesture: ' + LABEL[gesture] : 'no hand in view';
+    els.pSee.textContent = hand ? 'hand tracked, gesture: ' + gestureLabel(gesture) : 'no hand in view';
     els.pDecide.textContent = 'mode ' + mode;
     els.pAct.textContent = actText[mode];
     if (!dirty) return;
@@ -88,20 +88,25 @@ export function buildGestureGuide(el) {
   }
 }
 
-// Header switch between the robots. Buttons with aria-pressed, so screen readers
-// announce which robot is on.
-const ROBOT_NAMES = { humanoid: 'Humanoid', arm: 'Arm' };
-export function createRobotSwitch(el, robots, current, onChange) {
-  const btns = {};
-  const show = (r) => { for (const k of robots) btns[k].setAttribute('aria-pressed', String(k === r)); };
-  for (const r of robots) {
+// A row of buttons where exactly one is on (aria-pressed), e.g. the robot
+// switch or the replay speed. options: [{ value, label }].
+export function createSegmented(el, options, current, onChange) {
+  const btns = new Map();
+  const show = (v) => { for (const [k, b] of btns) b.setAttribute('aria-pressed', String(k === v)); };
+  for (const { value, label } of options) {
     const b = document.createElement('button');
-    b.type = 'button'; b.className = 'seg-btn'; b.textContent = ROBOT_NAMES[r];
-    b.addEventListener('click', () => { show(r); onChange(r); });
-    el.appendChild(b); btns[r] = b;
+    b.type = 'button'; b.className = 'seg-btn'; b.textContent = label;
+    b.addEventListener('click', () => { show(value); onChange(value); });
+    el.appendChild(b); btns.set(value, b);
   }
   show(current);
   return { show };
+}
+
+// Header switch between the robots.
+const ROBOT_NAMES = { humanoid: 'Humanoid', arm: 'Arm' };
+export function createRobotSwitch(el, robots, current, onChange) {
+  return createSegmented(el, robots.map((r) => ({ value: r, label: ROBOT_NAMES[r] })), current, onChange);
 }
 
 // Debug sliders for the arm, one per joint. Angles are shown in degrees because

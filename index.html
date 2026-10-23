@@ -45,6 +45,7 @@
         <div class="hint">Drag to orbit. Scroll to zoom.</div>
         <div class="perf" id="perf" aria-label="Performance">Render -- fps</div>
         <div class="timer" id="chHud" hidden></div>
+        <div class="timer rec" id="recHud" hidden></div>
       </div>
       <div class="hud bl" id="gestureBox" data-mode="MANUAL">
         <svg class="ring" viewBox="0 0 44 44" aria-hidden="true"><circle class="ring-bg" cx="22" cy="22" r="18"/><circle class="ring-fg" id="ringFg" cx="22" cy="22" r="18"/></svg>
@@ -142,6 +143,18 @@
       <div class="ph"><span class="k">Gesture commands</span><span class="chip">hold about 1 s</span></div>
       <ul class="glist" id="glist"></ul>
       <p class="note">Commands only fire when a gesture is held, so normal finger movement never triggers one. With no hand in view for 3 seconds the agent switches to IDLE and resumes when your hand returns.</p>
+    </section>
+
+    <section class="learn" aria-label="The robot learns">
+      <section class="panel" id="motionPanel" aria-label="Motions">
+        <div class="ph"><span class="k">Motions</span><span class="chip" id="recState">Ready</span></div>
+        <div class="row">
+          <button class="btn primary" id="btnRec" type="button">Record</button>
+          <div class="seg" id="speedSwitch" role="group" aria-label="Replay speed"></div>
+        </div>
+        <ul class="mlist" id="motionList" aria-label="Saved motions"></ul>
+        <p class="note" id="motionNote" aria-live="polite">Record what the robot does, up to a minute, then play it back. Playing switches to the motion's robot. Hold any command gesture to stop a replay.</p>
+      </section>
     </section>
   </main>
 

@@ -163,3 +163,77 @@ test('actText swaps the ACT wording without changing the decision', () => {
   assert.equal(agent.mode, 'HOLD');
   assert.ok(log.includes('ACT: freeze the arm'), log.join('\n'));
 });
+
+/* ---------- REPLAY (Phase 4) ---------- */
+const MOTION_REF = { id: 'm1', name: 'Wave' };
+
+test('startReplay enters REPLAY and endReplay hands control back', () => {
+  const { agent, run, log } = makeAgent();
+  run(show('NONE'), 100);
+  agent.startReplay(200, MOTION_REF, 'play "Wave"');
+  assert.equal(agent.mode, 'REPLAY');
+  assert.deepEqual(agent.replay, MOTION_REF);
+  assert.ok(log.includes('ACT: replay "Wave"'));
+  agent.endReplay(300);
+  assert.equal(agent.mode, 'MANUAL');
+  agent.endReplay(400);   // nothing to end any more: no change, no error
+  assert.equal(agent.mode, 'MANUAL');
+});
+
+test('a held command gesture interrupts a replay', () => {
+  for (const [g, mode] of [['FIST', 'HOLD'], ['OPEN', 'MANUAL'], ['PEACE', 'AUTO'], ['THUMBS_UP', 'GREET']]) {
+    const { agent, run } = makeAgent();
+    run(show('POINT'), 300);
+    agent.startReplay(300, MOTION_REF, 'play');
+    assert.equal(run(show(g), 1200).mode, mode, g);
+  }
+});
+
+test('the gesture already held when a replay starts does not stop it', () => {
+  const { agent, run, now } = makeAgent();
+  run(show('OPEN'), 2000);   // an open hand in MANUAL, held a long time
+  agent.startReplay(now, MOTION_REF, 'play');
+  assert.equal(run(show('OPEN'), 3000).mode, 'REPLAY');
+  run(show('NONE'), 400);    // put the hand down, then show it again
+  assert.equal(run(show('OPEN'), 1200).mode, 'MANUAL');
+});
+
+test('no hand during a replay does not switch to IDLE', () => {
+  const { agent, run } = makeAgent();
+  agent.startReplay(0, MOTION_REF, 'play');
+  assert.equal(run(NO_HAND, 5000).mode, 'REPLAY');
+});
+
+test('poseFor leaves the pose to the replay', () => {
+  assert.equal(poseFor('REPLAY', 0, { thumb: 0, index: 0, middle: 0, ring: 0, pinky: 0 }, 0), null);
+});
+
+/* ---------- trained gestures (Phase 4) ---------- */
+test('a trained gesture can switch mode or start a motion', () => {
+  const { agent, run, log } = makeAgent();
+  agent.custom = { rock: { type: 'mode', mode: 'HOLD' }, swirl: { type: 'motion', id: 'm1', name: 'Wave' } };
+  run(show('NONE'), 100);
+  const st = run(show('rock'), 500);
+  assert.equal(st.sends, 'HOLD');
+  assert.equal(run(show('rock'), 600).mode, 'HOLD');
+  assert.ok(log.includes('DECIDE: "rock" held, latch HOLD'));
+  assert.equal(run(show('swirl'), 500).sends, 'replay "Wave"');
+  assert.equal(run(show('swirl'), 600).mode, 'REPLAY');
+  assert.equal(agent.replay.id, 'm1');
+});
+
+test('an unmapped trained gesture is not a command', () => {
+  const { agent, run } = makeAgent();
+  agent.custom = {};
+  assert.equal(run(show('rock'), 2000).progress, 0);
+  assert.equal(agent.mode, 'MANUAL');
+});
+
+test('a trained gesture mapped to AUTO toggles it like the peace sign', () => {
+  const { agent, run } = makeAgent();
+  agent.custom = { loop: { type: 'mode', mode: 'AUTO' } };
+  assert.equal(run(show('loop'), 1200).mode, 'AUTO');
+  run(show('NONE'), 400);
+  assert.equal(run(show('loop'), 500).sends, 'MANUAL');
+  assert.equal(run(show('loop'), 700).mode, 'MANUAL');
+});

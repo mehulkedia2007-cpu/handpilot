@@ -46,8 +46,9 @@ export function autoPath(t) {
 // t: seconds since the mode began (so AUTO always starts at the top of its path).
 // manual: { target, closed } from the hand; target is null when no hand is in view.
 // Returns { pose, target, reachable }, or null to keep the arm exactly where it is.
+// REPLAY is null too: main.js takes the pose from the motion being replayed.
 export function armGoalFor(mode, t, manual = {}) {
-  if (mode === 'HOLD') return null;
+  if (mode === 'HOLD' || mode === 'REPLAY') return null;
   if (mode === 'IDLE') return { pose: defaultArmPose(), target: null, reachable: true };
   if (mode === 'GREET') {
     // Lift the arm and wave the gripper side to side, opening and closing it.
@@ -73,6 +74,7 @@ export const ARM_MODE_DESC = {
   AUTO: 'Agent runs a pick-and-place demo. Show a peace sign to hand back',
   IDLE: 'Waiting for a hand. Arm parked',
   GREET: 'Waving hello',
+  REPLAY: 'Playing a saved motion. Hold any command gesture to stop',
 };
 export const ARM_ACT_TEXT = {
   MANUAL: 'move the gripper to your hand, pinch to grab',
@@ -80,4 +82,5 @@ export const ARM_ACT_TEXT = {
   AUTO: 'run the pick-and-place demo',
   IDLE: 'park the arm',
   GREET: 'wave the gripper for 3 s',
+  REPLAY: 'play back a saved motion',
 };

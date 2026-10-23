@@ -1,5 +1,5 @@
 // Overlay on the 3D stage: mode badge, gesture name and the hold-progress ring.
-import { COMMANDS, LABEL } from '../core/gestures.js';
+import { gestureLabel } from '../core/gestures.js';
 
 export const MODE_DESC = {
   MANUAL: 'Robot mirrors your fingers',
@@ -7,6 +7,7 @@ export const MODE_DESC = {
   AUTO: 'Agent is driving. Show a peace sign to hand back',
   IDLE: 'Waiting for a hand. Robot at neutral pose',
   GREET: 'Waving hello',
+  REPLAY: 'Playing a saved motion. Hold any command gesture to stop',
 };
 
 // Circumference of the ring (2 * PI * r, r = 18). Shrinking the dash offset from
@@ -34,7 +35,7 @@ export function createHud(els) {
       els.gestureBox.dataset.mode = st.mode;
       els.modeName.textContent = st.mode;
       els.modeDesc.textContent = desc[st.mode];
-      els.gestureName.textContent = hand ? LABEL[gesture] : 'no hand';
+      els.gestureName.textContent = hand ? gestureLabel(gesture) : 'no hand';
       els.ringFg.style.strokeDashoffset = String(RING_LEN * (1 - st.progress));
       els.handChip.hidden = !(hand && hf.handedness);
       if (hf.handedness) els.handChip.textContent = hf.handedness + ' hand';

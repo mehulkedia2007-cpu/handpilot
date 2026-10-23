@@ -41,3 +41,6 @@ export const SAYS = { FIST: 'fist', OPEN: 'open palm', PEACE: 'peace sign', THUM
 // Display names for the HUD.
 export const LABEL = { NONE: 'none', FIST: 'fist', OPEN: 'open palm', PEACE: 'peace sign', THUMBS_UP: 'thumbs up', POINT: 'point',
   THUMBS_DOWN: 'thumbs down', I_LOVE_YOU: 'I love you' };
+
+// Name to show for any gesture, including trained ones (which use their own name).
+export const gestureLabel = (g) => LABEL[g] || g;

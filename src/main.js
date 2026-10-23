@@ -13,10 +13,12 @@ import { createPinchLatch } from './core/pinch.js';
 import { forwardKinematics } from './core/ik.js';
 import { createStacker, isOneStack, BLOCK_SIZE } from './core/stacking.js';
 import { createChallenge, formatTime, loadBest, saveBest, isNewBest } from './core/challenge.js';
+import { createRecorder, replayFrame, newMotionId, nextName, RECORD_HZ, MAX_RECORD_MS } from './core/motion.js';
 import { createSimulator } from './input/simulator.js';
 import { createCamera, CAMERA_BLOCKED_MSG } from './input/camera.js';
 import { createHud } from './ui/hud.js';
 import { createChannels, createAgentPanel, buildGestureGuide, createRobotSwitch, createJointPanel } from './ui/panels.js';
+import { createMotionsPanel } from './ui/motions.js';
 
 const $ = (id) => document.getElementById(id);
 const t0 = performance.now();
@@ -242,16 +244,75 @@ function showRobot() {
   channels.setRobot(settings.robot);
   robotSwitch.show(settings.robot);
 }
-const robotSwitch = createRobotSwitch($('robotSwitch'), ROBOTS, settings.robot, (r) => {
+function selectRobot(r) {
+  if (recorder.recording) stopRecording();   // a motion only ever holds one robot's joints
   settings.robot = r;
   persist();
   showRobot();
   panel.add('ACT', 'robot switched to ' + r);
+}
+const robotSwitch = createRobotSwitch($('robotSwitch'), ROBOTS, settings.robot, selectRobot);
+
+/* ---------- motions: record and replay ---------- */
+// Recording samples the pose the robot on screen is showing, about 30 times a second.
+// Replay hands the agent a REPLAY mode; each frame the loop asks core/motion.js
+// for the pose at that moment and the robot eases to it.
+let motions = [];      // { id, name, robot, hz, samples }, oldest first
+const recorder = createRecorder();
+let replay = null;     // { motion, since, speed } while the agent is in REPLAY
+const motionsUi = createMotionsPanel({ rec: $('btnRec'), state: $('recState'), speed: $('speedSwitch'), list: $('motionList'), note: $('motionNote') }, {
+  record: () => (recorder.recording ? stopRecording() : startRecording()),
+  play: (id) => playMotion(id),
+  stop: () => agent.endReplay(performance.now(), 'replay stopped from the panel'),
 });
+const playingId = () => (agent.mode === 'REPLAY' && agent.replay ? agent.replay.id : null);
+const showMotions = () => motionsUi.render(motions, { recording: recorder.recording, playingId: playingId() });
+
+function startRecording() {
+  recorder.start(performance.now(), settings.robot);
+  motionsUi.setState('Recording', 'err');
+  motionsUi.note(`Recording the ${settings.robot}. Move it with your hand, the sliders or a mode, then press Stop recording.`);
+  panel.add('ACT', 'start recording the ' + settings.robot);
+  showMotions();
+}
+function stopRecording(why = '') {
+  const rec = recorder.stop();
+  $('recHud').hidden = true;
+  motionsUi.setState('Ready');
+  if (!rec) motionsUi.note('That recording was too short to keep. Record for at least a moment.');
+  else {
+    const m = { id: newMotionId(), name: nextName(motions.map((x) => x.name)), hz: RECORD_HZ, ...rec };
+    motions.push(m);
+    motionsUi.note(`Saved "${m.name}".` + (why ? ' ' + why : ''));
+    panel.add('ACT', `saved motion "${m.name}"`);
+  }
+  showMotions();
+}
+function playMotion(id) {
+  const m = motions.find((x) => x.id === id);
+  if (!m) return;
+  if (m.robot !== settings.robot) selectRobot(m.robot);
+  agent.startReplay(performance.now(), m, `play "${m.name}" at ${motionsUi.speed}×`);
+  showMotions();
+}
+// The pose to show this frame of a replay, or null if there is nothing to play.
+function replayPose(now) {
+  if (!replay || replay.since !== agent.modeSince) {
+    // A replay just began (from Play, or later from a trained gesture).
+    const m = agent.replay && motions.find((x) => x.id === agent.replay.id);
+    if (!m) { agent.endReplay(now, 'that motion no longer exists'); return null; }
+    if (m.robot !== settings.robot) selectRobot(m.robot);
+    replay = { motion: m, since: agent.modeSince, speed: motionsUi.speed };
+  }
+  const f = replayFrame(replay.motion, now - replay.since, replay.speed);
+  if (f.done) agent.endReplay(now, `"${replay.motion.name}" finished`);
+  return f.joints;
+}
 showRobot();
+showMotions();
 
 /* ---------- main loop ---------- */
-let lastHud = 0, lastFrame = performance.now();
+let lastHud = 0, lastFrame = performance.now(), lastMode = agent.mode;
 const renderPerf = new PerfMeter();
 function frame() {
   requestAnimationFrame(frame);
@@ -263,10 +324,14 @@ function frame() {
   const hand = hf.present, b = hf.bends;
   const g = pickGesture(hf);
   const st = agent.step(now, { hand, gesture: g });
+  if (st.mode !== 'REPLAY') replay = null;
+  const replayed = st.mode === 'REPLAY' ? replayPose(now) : null;
+  if (st.mode !== lastMode) { lastMode = st.mode; showMotions(); }   // Play turns into Stop and back
   // Sensitivity only applies to the camera: the simulator's sliders already span the whole range.
   const gain = source === 'cam' ? settings.handGain : 1;
-  const target = poseFor(st.mode, t, b, yawFromPalmX(stretch(hf.palm.x, gain)));
-  const following = st.mode === 'MANUAL' && now - agent.modeSince > MODE_EASE_MS;
+  const target = replayed && settings.robot === 'humanoid' ? replayed : poseFor(st.mode, t, b, yawFromPalmX(stretch(hf.palm.x, gain)));
+  // Following the hand or a replay, the robot keeps up closely once the mode has settled.
+  const following = (st.mode === 'MANUAL' || st.mode === 'REPLAY') && now - agent.modeSince > MODE_EASE_MS;
   if (target) applyPose(target, following ? FOLLOW_ALPHA : POSE_ALPHA);
   if (arm && settings.robot === 'arm') {
     if (jointDebug) {
@@ -282,9 +347,11 @@ function frame() {
       }
       const manual = { target: hand ? targetFromPalm(hf.palm, undefined, undefined, gain) : null, closed };
       // Seconds since the mode began, so the AUTO demo always starts from the top.
-      const goal = armGoalFor(st.mode, (now - agent.modeSince) / 1000, manual);
+      const goal = replayed && settings.robot === 'arm'
+        ? { pose: clampArmPose(replayed), target: null, reachable: true }
+        : armGoalFor(st.mode, (now - agent.modeSince) / 1000, manual);
       // The grip eases toward its goal like the joints do, which animates the fingers.
-      if (goal) blendPose(armCur, goal.pose, POSE_ALPHA);
+      if (goal) blendPose(armCur, goal.pose, st.mode === 'REPLAY' && following ? FOLLOW_ALPHA : POSE_ALPHA);
       arm.showTarget(goal && goal.target, goal ? goal.reachable : true);
     }
     if (blocksView) {
@@ -296,6 +363,9 @@ function frame() {
     }
     arm.apply(armCur, stacker.held ? BLOCK_SIZE : 0);
   }
+  // Record what is on screen, after this frame's easing, so a replay looks the same.
+  if (recorder.recording && !recorder.sample(now, settings.robot === 'arm' ? armCur : cur))
+    stopRecording(`Recording stops after ${MAX_RECORD_MS / 1000} s.`);
   if (stage) stage.render();
   cam.perf.update(now);
   if (renderPerf.update(now)) hud.perf(renderPerf, source === 'cam' ? cam.perf : null);
@@ -308,6 +378,7 @@ function frame() {
     panel.update(st.mode, g, hand);
     if (settings.robot === 'arm' && !jointDebug) joints.show(armCur);
     if (challenge.state === 'running') showChallenge(now);
+    if (recorder.recording) { $('recHud').hidden = false; $('recHud').textContent = 'REC ' + (recorder.elapsed(now) / 1000).toFixed(1) + ' s'; }
   }
 }
 applyPose(poseFor('MANUAL', 0, sim.read(0).bends, 0), 1);
