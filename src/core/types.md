@@ -33,7 +33,7 @@ What `Agent.step` returns:
 
 ```js
 AgentState = {
-  mode: "MANUAL"|"HOLD"|"AUTO"|"IDLE"|"GREET"|"REPLAY",   // LLM (Phase 5) comes later
+  mode: "MANUAL"|"HOLD"|"AUTO"|"IDLE"|"GREET"|"REPLAY"|"LLM",   // LLM: the language agent drives the arm (Phase 5)
   progress: number,   // 0–1, how far through the ~0.9 s hold the current gesture is
   candidate: string,  // the gesture currently being held
   sends: string|null  // what holding it will do: a mode ("HOLD") or 'replay "Wave"'; null when nothing is being held
@@ -118,4 +118,42 @@ Training = {
   }]
 }
 // Export file: { format: "handpilot-gestures", version: 1, ...Training }
+```
+
+## Tool calls (Phase 5)
+
+The language agent's tools are defined in `core/tools.js`. A checked call, as the server sends it to the page:
+
+```js
+ToolCall = {
+  id,      // the model's tool_use id, e.g. "toolu_01..."
+  name,    // "move_gripper_to" | "open_gripper" | "close_gripper" | "play_motion" | "set_mode" | "get_scene"
+  args,    // after checkToolCall: { x, y, z } clamped to WORKSPACE | { name } | { mode } | {}
+  notes    // what was clamped, e.g. ["x 9 clamped to 2"]
+}
+```
+
+`POST /agent` bodies and answers:
+
+```js
+// page -> server
+{ command, scene }                  // start: command up to 500 characters, scene from describeScene
+{ id, results: [{ id, ok, content }] }   // the results of the last calls; content is JSON or text
+{ id, stop: true }                  // forget this command (Stop)
+
+// server -> page
+{ status: "tools", id, step, text, calls: [ToolCall], rejected: [{ id, name, error }] }
+{ status: "done", id, step, reply, rejected, limited?, refused? }
+{ error }                           // with a 4xx/5xx status
+```
+
+The scene the model reads (`describeScene` in `core/llmArm.js`), numbers rounded to 2 decimals:
+
+```js
+Scene = {
+  robot, mode,
+  gripper: { x, y, z, closed, holding },   // holding: a block id or null
+  blocks: [{ id, x, y, z, top, on, covered }],   // on: "table" | "floor" | "gripper" | a block id
+  block_size, workspace, motions           // motions: saved motion names
+}
 ```

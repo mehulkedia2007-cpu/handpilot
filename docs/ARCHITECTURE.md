@@ -27,6 +27,7 @@ palm x, y, width ─► core/workspace.js targetFromPalm ─► 3D target in the
                                                               ▼
 pinch ─► core/pinch.js latch (close < 0.35, open > 0.5) ──► armGoalFor(mode, t, {target, closed})
                                                               │  MANUAL: core/ik.js solveIK(target) + grip
+                                                              │  LLM: IK on the language agent's target (Phase 5)
                                                               │  AUTO: IK along the looping pick-and-place path
                                                               │  HOLD: null (keep pose)  IDLE: park  GREET: wave
                                                               ▼
@@ -79,7 +80,35 @@ HandFrame.landmarks (camera, or the simulator's made-up hand) ─► core/traini
 
 The trainer's recorder (`createSampler`) and the accuracy check (`holdoutSplit`, `evaluate`, `accuracyReport` in `core/knn.js`) are pure too; `ui/trainer.js` only draws them.
 
-Phase 5 adds the LLM agent and `server/`.
+Phase 5 adds the language agent and `server/`:
+
+```
+Ask the arm box ─► agent-llm/client.js ─ POST /agent {command, scene} ─► server/index.js
+                                                                           │ CORS (localhost + GitHub Pages), rate limit,
+                                                                           │ 64 kB bodies, missing-key check
+                                                                           ▼
+                                             server/agent.js keeps the conversation (session id, step count)
+                                                                           │ Anthropic Messages API: system prompt
+                                                                           │ (server/prompt.js) + TOOLS (core/tools.js)
+                                                                           ▼
+                                             model reply ─► text only, or MAX_STEPS reached ─► {status: done, reply}
+                                                   │
+                                                   └─► tool_use blocks ─► checkToolCalls: clamp / reject
+                                                                           │ rejected → error tool_result, ask again
+                                                                           ▼
+           {status: tools, id, calls} ◄────────────────────────────────────┘
+                 ▼
+main.js runLlm: checkToolCall again ─► runTool
+                 │  move / open / close: agent LLM mode; core/llmArm.js glides the target, armGoalFor('LLM') → IK,
+                 │                       done when forwardKinematics says the gripper is there (or a timeout)
+                 │  play_motion: REPLAY until it ends     set_mode: agent.llmSetMode     get_scene: describeScene
+                 ▼
+POST /agent {id, results} ─► the server adds one tool_result per tool_use, in order, and asks the model again
+```
+
+Design choice (P5.3): the browser owns the robot, so it runs the tools; the server owns the conversation, so the model's own messages (thinking blocks included) go back to it exactly as written and the page can't reset the step count. One request per model turn is simpler than streaming tool requests over Server-Sent Events, and the extra round trip is tiny next to the model's own time. A session the page stops answering is forgotten after 3 minutes.
+
+Safety lives in layers: the tool schema tells the model the bounds, `checkToolCall` clamps or rejects on the server and again in the page, IK clamps every joint to its limits, `MAX_STEPS` and the rate limit cap spending, and **Stop** or any command gesture (`agent.commands` changes) cancels the request and the arm's job. When a command ends, the agent hands back to MANUAL, or to HOLD while a block is held. The static site doesn't depend on any of this: the page only calls the server when the command box is used.
 
 ## The main loop (`src/main.js`)
 
@@ -113,6 +142,8 @@ Phase 4 adds two more keys, also separate from settings: `handpilot.motions.v1` 
 | `src/input/` | `core/`, DOM, camera | Three.js |
 | `src/scene/` | `core/`, Three.js | the agent |
 | `src/ui/` | `core/`, DOM | Three.js |
+| `src/agent-llm/` | `fetch` | DOM, Three.js |
+| `server/` | `core/tools.js`, `core/workspace.js`, `core/stacking.js`, Node, its own `node_modules` | DOM, Three.js |
 | `src/main.js` | everything | |
 
 Keeping `core/` pure means every rule and formula can be tested in Node in milliseconds with `npm test`.

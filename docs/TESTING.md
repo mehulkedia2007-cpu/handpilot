@@ -71,6 +71,24 @@ Run `npm test` first; it must pass. Then go through this list in Chrome at the e
 - [ ] Gesture **Export** / **Import** round-trips; a gesture with the same name is replaced.
 - [ ] Camera: two custom gestures (e.g. rock 🤘 and three fingers) are recognised reliably with a real hand, with either hand.
 
+## Language agent (Phase 5)
+- [x] With no agent server, the page loads with no console errors and makes no request to it; the chip says **Not connected**.
+- [x] With no server, clicking the **Ask the arm** box shows **Agent offline** with how to start it; **Send** says so, and gestures and everything else still work.
+- [ ] `cd server && npm run dev` with no `server/.env`: the terminal says the key and model are missing; the box shows **Not set up** with the same message.
+- [ ] With a key: the box shows **Online (model name)**.
+- [x] A command switches to the arm, the badge shows **LLM** (pink), **Send** is disabled and **Stop** enabled while it works.
+- [x] The log shows SEE (command sent, results back), ACT (each tool call with its arguments) and DECIDE (the agent's words), and the reply appears under the box.
+- [ ] Real model: "pick up the red block" works in at least 4 of 5 tries on fresh blocks (**Reset blocks** between tries). *Checked with a scripted model in `npm run e2e`.*
+- [ ] Real model: "stack red on blue" works in at least 4 of 5 tries on fresh blocks. *Checked with a scripted model in `npm run e2e`.*
+- [x] Finishing while a block is held goes to HOLD (the block stays up); otherwise back to MANUAL.
+- [x] Unknown tools and malformed arguments are logged as rejected; out-of-range numbers are clamped and the log says so.
+- [x] **Stop** halts the arm at once and switches to HOLD; nothing moves afterwards.
+- [x] Holding a command gesture (e.g. **Fist**) while the agent works stops it and does what the gesture says.
+- [ ] Real model: an impossible command ("stack the purple block") makes no moves and explains why.
+- [ ] Sending 11 commands within a minute: the 11th says to try again in N s.
+- [ ] Stopping the server mid-command: the box says **Agent offline** and the robot returns to MANUAL.
+- [ ] The live GitHub Pages site can reach the local server in Chrome (after allowing local network access).
+
 ## Camera (Chrome, Edge, Safari)
 - [x] **Start camera** asks for permission, then shows the preview with the hand skeleton. The note says whether the model runs on the GPU or CPU.
 - [ ] The stage shows a **Left hand** / **Right hand** chip that matches the hand you actually raised.
