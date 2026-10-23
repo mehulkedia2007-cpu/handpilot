@@ -159,6 +159,25 @@
         </div>
         <p class="note" id="motionNote" aria-live="polite">Record what the robot does, up to a minute, then play it back. Playing switches to the motion's robot. Hold any command gesture to stop a replay. Motions are saved in this browser; export them to keep a copy.</p>
       </section>
+
+      <section class="panel" id="trainerPanel" aria-label="Gesture trainer">
+        <div class="ph"><span class="k">Gesture trainer</span><span class="chip">KNN · k = 5</span></div>
+        <div class="row tr-rec">
+          <input type="text" id="trName" placeholder="Gesture name, e.g. rock" aria-label="Gesture name" autocomplete="off">
+          <button class="btn primary" id="btnTrRec" type="button">Record</button>
+        </div>
+        <p class="tr-status" id="trStatus" aria-live="polite">Hold the hand shape in view. After a 3 second countdown, 30 samples are taken over 3 seconds.</p>
+        <p class="tr-seen" id="trSeen" aria-live="off"></p>
+        <ul class="mlist" id="trList" aria-label="Trained gestures"></ul>
+        <div class="sliders tr-dist">
+          <div class="srow"><label for="trDistance">Match distance</label><input id="trDistance" type="range" step="0.05" value="0.6"><output id="trDistanceOut">0.60</output></div>
+        </div>
+        <div class="row">
+          <button class="btn" id="btnTrExport" type="button">Export</button>
+          <button class="btn" id="btnTrImport" type="button">Import</button>
+        </div>
+        <p class="note" id="trNote" aria-live="polite">A trained gesture you hold for about a second runs its action, and it wins over the built-in gestures when the classifier is confident. Lower the match distance if it fires on hands you didn't teach; raise it if it misses yours. Training data is saved in this browser.</p>
+      </section>
     </section>
   </main>
 

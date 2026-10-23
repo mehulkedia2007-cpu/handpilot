@@ -41,7 +41,9 @@ export function createHud(els) {
       if (hf.handedness) els.handChip.textContent = hf.handedness + ' hand';
       els.builtInName.hidden = !(hand && hf.builtInGesture);
       if (hf.builtInGesture) els.builtInName.textContent = 'MediaPipe: ' + hf.builtInGesture + ' ' + Math.round(hf.builtInScore * 100) + '%';
-      els.holdHint.textContent = st.progress > 0 ? 'Keep holding to send ' + COMMANDS[st.candidate] : ' ';
+      // sends is a mode ("HOLD") or, for a trained gesture, an action ('replay "Wave"').
+      // The no-break space keeps the line's height when there is nothing to say.
+      els.holdHint.textContent = st.sends ? 'Keep holding to ' + (/^[A-Z]+$/.test(st.sends) ? 'send ' : '') + st.sends : '\u00a0';
     },
   };
 }

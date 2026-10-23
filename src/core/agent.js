@@ -26,8 +26,8 @@ export class Agent {
     this.progress = 0;
     this.actText = null;   // optional { MODE: text } to describe actions for another robot
     this.replay = null;    // { id, name } of the motion being replayed in REPLAY
-    // Trained gestures (Phase 4): { gestureName: action }, where an action is
-    // { type: 'mode', mode } or { type: 'motion', id, name }. Set by main.js.
+    // Trained gestures (Phase 4): { "trained:name": action }, where an action is
+    // { type: 'mode', mode, label } or { type: 'motion', id, name, label }. Set by main.js.
     this.custom = {};
   }
 
@@ -73,8 +73,9 @@ export class Agent {
 
   runCommand(now, g) {
     const c = this.custom[g];
-    if (c && c.type === 'motion') this.startReplay(now, c, `"${g}" held, replay a saved motion`);
-    else if (c) this.commandMode(now, c.mode, `"${g}"`);
+    const who = c && `"${c.label || g}"`;   // trained gestures are logged by their own name
+    if (c && c.type === 'motion') this.startReplay(now, c, who + ' held, replay a saved motion');
+    else if (c) this.commandMode(now, c.mode, who);
     // Peace toggles: it starts AUTO, and the same sign again hands control back.
     else this.commandMode(now, COMMANDS[g], SAYS[g]);
   }

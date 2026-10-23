@@ -42,5 +42,9 @@ export const SAYS = { FIST: 'fist', OPEN: 'open palm', PEACE: 'peace sign', THUM
 export const LABEL = { NONE: 'none', FIST: 'fist', OPEN: 'open palm', PEACE: 'peace sign', THUMBS_UP: 'thumbs up', POINT: 'point',
   THUMBS_DOWN: 'thumbs down', I_LOVE_YOU: 'I love you' };
 
+// Trained gestures (Phase 4) reach the agent as "trained:<name>", so one you
+// call "FIST" can never be mistaken for the built-in fist.
+export const TRAINED = 'trained:';
+
 // Name to show for any gesture, including trained ones (which use their own name).
-export const gestureLabel = (g) => LABEL[g] || g;
+export const gestureLabel = (g) => (g.startsWith(TRAINED) ? g.slice(TRAINED.length) : LABEL[g] || g);

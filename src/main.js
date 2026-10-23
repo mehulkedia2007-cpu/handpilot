@@ -20,6 +20,9 @@ import { createCamera, CAMERA_BLOCKED_MSG } from './input/camera.js';
 import { createHud } from './ui/hud.js';
 import { createChannels, createAgentPanel, buildGestureGuide, createRobotSwitch, createJointPanel, downloadText } from './ui/panels.js';
 import { createMotionsPanel } from './ui/motions.js';
+import { loadTraining, saveTraining, exportTraining, parseTrainingFile, mergeTraining, addSamples, buildKnn,
+  customCommands, createSampler, vectorFor, TRAINED } from './core/training.js';
+import { createTrainerPanel } from './ui/trainer.js';
 
 const $ = (id) => document.getElementById(id);
 const t0 = performance.now();
@@ -279,7 +282,11 @@ const motionsUi = createMotionsPanel({
   remove(id) {
     const m = motions.find((x) => x.id === id);
     motions = motions.filter((x) => x.id !== id);
-    storeMotions(`Deleted "${m.name}".`);
+    // A trained gesture that played this motion now does nothing.
+    let unmapped = 0;
+    for (const g of training.gestures) if (g.action && g.action.type === 'motion' && g.action.id === id) { g.action = null; unmapped++; }
+    if (unmapped) saveTraining(storage, training);
+    storeMotions(`Deleted "${m.name}".` + (unmapped ? (unmapped === 1 ? ' 1 trained gesture no longer plays it.' : ` ${unmapped} trained gestures no longer play it.`) : ''));
     panel.add('ACT', `deleted motion "${m.name}"`);
   },
   exportAll() {
@@ -301,6 +308,7 @@ function storeMotions(msg) {
   const ok = saveMotions(storage, motions);
   motionsUi.note(msg + (ok ? '' : ' (This browser would not save it, so it lasts until you reload. Export to keep a copy.)'));
   showMotions();
+  refreshTrainer();   // the trainer's action lists name the motions
 }
 const playingId = () => (agent.mode === 'REPLAY' && agent.replay ? agent.replay.id : null);
 const showMotions = () => motionsUi.render(motions, { recording: recorder.recording, playingId: playingId() });
@@ -346,8 +354,88 @@ function replayPose(now) {
   if (f.done) agent.endReplay(now, `"${replay.motion.name}" finished`);
   return f.joints;
 }
+
+/* ---------- gesture trainer ---------- */
+// Recorded examples are normalised hand shapes (core/hand.js). A KNN classifier
+// built from them runs on every frame; a confident answer beats the built-in
+// gestures, and the agent treats it like any other command gesture.
+let training = loadTraining(storage);
+let knn = buildKnn(training);
+let seen = null;            // the latest prediction, for the read-out
+const sampler = createSampler();
+let samplingName = null, lastSampling = null;
+const trainer = createTrainerPanel({
+  name: $('trName'), rec: $('btnTrRec'), status: $('trStatus'), seen: $('trSeen'), list: $('trList'),
+  distance: $('trDistance'), distanceOut: $('trDistanceOut'), exportBtn: $('btnTrExport'), importBtn: $('btnTrImport'), note: $('trNote'),
+}, {
+  record(typed) {
+    const name = cleanName(typed);
+    if (!name) { trainer.status('Type a name for the gesture first.'); return; }
+    samplingName = name;
+    sampler.start(performance.now());
+    trainer.showSampling(sampler.step(performance.now(), null), name);
+  },
+  cancel() {
+    sampler.cancel(); samplingName = null;
+    trainer.showSampling(null);
+    trainer.status('Recording cancelled.');
+  },
+  setAction(name, action) {
+    const g = training.gestures.find((x) => x.name === name);
+    g.action = action;
+    const what = !action ? 'does nothing' : action.type === 'mode' ? 'switches to ' + action.mode
+      : `plays "${motions.find((m) => m.id === action.id).name}"`;
+    storeTraining(`Holding "${name}" now ${what}.`);
+  },
+  remove(name) {
+    training = { ...training, gestures: training.gestures.filter((g) => g.name !== name) };
+    storeTraining(`Deleted "${name}".`);
+    panel.add('ACT', `forgot gesture "${name}"`);
+  },
+  setDistance(v) {
+    training.maxDistance = v;
+    storeTraining(`Match distance set to ${v.toFixed(2)}.`);
+  },
+  exportAll() {
+    downloadText('handpilot-gestures.json', exportTraining(training));
+    trainer.note(`Exported ${training.gestures.length} gesture${training.gestures.length === 1 ? '' : 's'} to handpilot-gestures.json.`);
+  },
+  importText(text) {
+    try {
+      const r = mergeTraining(training, parseTrainingFile(text));
+      training = r.data;
+      storeTraining(`Imported ${r.added + r.replaced} gesture${r.added + r.replaced === 1 ? '' : 's'}` + (r.replaced ? ` (${r.replaced} replaced one with the same name).` : '.'));
+    } catch (e) {
+      trainer.note(e.message);
+    }
+  },
+});
+// Rebuild the classifier and the agent's trained commands, save, and redraw.
+function storeTraining(msg) {
+  const ok = saveTraining(storage, training);
+  trainer.note(msg + (ok ? '' : ' (This browser would not save it, so it lasts until you reload. Export to keep a copy.)'));
+  knn = buildKnn(training);
+  refreshTrainer();
+}
+function refreshTrainer() {
+  agent.custom = customCommands(training, motions);
+  trainer.render(training, motions);
+}
+function finishSampling(r) {
+  const name = samplingName;
+  samplingName = null;
+  trainer.showSampling(null);
+  if (r.count < 5) { trainer.status(`Only ${r.count} samples of "${name}" were taken. Keep your hand in view and try again.`); return; }
+  training = addSamples(training, name, r.samples);
+  trainer.status(`Recorded ${r.count} samples of "${name}". Pick what it should do below, or record another gesture.`);
+  trainer.clearName();
+  panel.add('ACT', `learned gesture "${name}" (${r.count} samples)`);
+  storeTraining(`"${name}" has ${training.gestures.find((g) => g.name === name).samples.length} samples.`);
+}
+
 showRobot();
 showMotions();
+refreshTrainer();
 
 /* ---------- main loop ---------- */
 let lastHud = 0, lastFrame = performance.now(), lastMode = agent.mode;
@@ -360,8 +448,16 @@ function frame() {
   renderPerf.tick();
   const hf = handFilter.filter(source === 'cam' ? cam.read() : sim.read(now));
   const hand = hf.present, b = hf.bends;
-  const g = pickGesture(hf);
-  const st = agent.step(now, { hand, gesture: g });
+  // A trained gesture the classifier is sure about beats the built-in ones.
+  const vec = knn.size || sampler.active ? vectorFor(hf) : null;
+  seen = vec && knn.size ? knn.predict(vec) : null;
+  const g = seen && seen.label !== 'unknown' ? TRAINED + seen.label : pickGesture(hf);
+  if (sampler.active) {
+    lastSampling = sampler.step(now, vec);
+    if (lastSampling.phase === 'done') finishSampling(lastSampling);
+  }
+  // While the trainer records, hand shapes are examples, not commands.
+  const st = agent.step(now, { hand, gesture: sampler.active ? 'NONE' : g });
   if (st.mode !== 'REPLAY') replay = null;
   const replayed = st.mode === 'REPLAY' ? replayPose(now) : null;
   if (st.mode !== lastMode) { lastMode = st.mode; showMotions(); }   // Play turns into Stop and back
@@ -416,6 +512,8 @@ function frame() {
     panel.update(st.mode, g, hand);
     if (settings.robot === 'arm' && !jointDebug) joints.show(armCur);
     if (challenge.state === 'running') showChallenge(now);
+    trainer.showSeen(seen, knn.size > 0);
+    if (sampler.active) trainer.showSampling(lastSampling, samplingName);
     if (recorder.recording) { $('recHud').hidden = false; $('recHud').textContent = 'REC ' + (recorder.elapsed(now) / 1000).toFixed(1) + ' s'; }
   }
 }
